@@ -17,6 +17,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.IOUtils,
+  System.DateUtils,
   DX.TOML;
 
 type
@@ -78,6 +79,22 @@ type
   public
     [Test]
     procedure TestExample01;
+  end;
+
+  [TestFixture]
+  TTomlDateTimeTests = class
+  public
+    [Test]
+    procedure TestOffsetDateTime;
+
+    [Test]
+    procedure TestLocalDateTime;
+
+    [Test]
+    procedure TestLocalDate;
+
+    [Test]
+    procedure TestLocalTime;
   end;
 
 implementation
@@ -349,6 +366,116 @@ begin
   end
   else
     Assert.Pass('Golden file not found, skipping test');
+end;
+
+{ TTomlDateTimeTests }
+
+procedure TTomlDateTimeTests.TestOffsetDateTime;
+var
+  LToml: string;
+  LTable: TToml;
+  LDateTime: TDateTime;
+begin
+  // Test offset datetime with Z (UTC)
+  LToml := 'utc_time = 1979-05-27T07:32:00Z';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('utc_time'), 'Should have utc_time key');
+    LDateTime := LTable['utc_time'].AsDateTime;
+
+    Assert.AreEqual(1979, YearOf(LDateTime), 'Year should be 1979');
+    Assert.AreEqual(5, MonthOf(LDateTime), 'Month should be 5');
+    Assert.AreEqual(27, DayOf(LDateTime), 'Day should be 27');
+    Assert.AreEqual(7, HourOf(LDateTime), 'Hour should be 7');
+    Assert.AreEqual(32, MinuteOf(LDateTime), 'Minute should be 32');
+    Assert.AreEqual(0, SecondOf(LDateTime), 'Second should be 0');
+  finally
+    LTable.Free;
+  end;
+
+  // Test offset datetime with timezone offset
+  LToml := 'offset_time = 1979-05-27T00:32:00-07:00';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('offset_time'), 'Should have offset_time key');
+    LDateTime := LTable['offset_time'].AsDateTime;
+
+    Assert.AreEqual(1979, YearOf(LDateTime), 'Year should be 1979');
+    Assert.AreEqual(5, MonthOf(LDateTime), 'Month should be 5');
+    Assert.AreEqual(27, DayOf(LDateTime), 'Day should be 27');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlDateTimeTests.TestLocalDateTime;
+var
+  LToml: string;
+  LTable: TToml;
+  LDateTime: TDateTime;
+begin
+  LToml := 'local_time = 1979-05-27T07:32:00';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('local_time'), 'Should have local_time key');
+    LDateTime := LTable['local_time'].AsDateTime;
+
+    Assert.AreEqual(1979, YearOf(LDateTime), 'Year should be 1979');
+    Assert.AreEqual(5, MonthOf(LDateTime), 'Month should be 5');
+    Assert.AreEqual(27, DayOf(LDateTime), 'Day should be 27');
+    Assert.AreEqual(7, HourOf(LDateTime), 'Hour should be 7');
+    Assert.AreEqual(32, MinuteOf(LDateTime), 'Minute should be 32');
+    Assert.AreEqual(0, SecondOf(LDateTime), 'Second should be 0');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlDateTimeTests.TestLocalDate;
+var
+  LToml: string;
+  LTable: TToml;
+  LDateTime: TDateTime;
+begin
+  LToml := 'birth_date = 1979-05-27';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('birth_date'), 'Should have birth_date key');
+    LDateTime := LTable['birth_date'].AsDateTime;
+
+    Assert.AreEqual(1979, YearOf(LDateTime), 'Year should be 1979');
+    Assert.AreEqual(5, MonthOf(LDateTime), 'Month should be 5');
+    Assert.AreEqual(27, DayOf(LDateTime), 'Day should be 27');
+    Assert.AreEqual(0, HourOf(LDateTime), 'Hour should be 0 for date-only');
+    Assert.AreEqual(0, MinuteOf(LDateTime), 'Minute should be 0 for date-only');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlDateTimeTests.TestLocalTime;
+var
+  LToml: string;
+  LTable: TToml;
+  LDateTime: TDateTime;
+begin
+  LToml := 'wake_time = 07:32:00';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('wake_time'), 'Should have wake_time key');
+    LDateTime := LTable['wake_time'].AsDateTime;
+
+    Assert.AreEqual(7, HourOf(LDateTime), 'Hour should be 7');
+    Assert.AreEqual(32, MinuteOf(LDateTime), 'Minute should be 32');
+    Assert.AreEqual(0, SecondOf(LDateTime), 'Second should be 0');
+  finally
+    LTable.Free;
+  end;
 end;
 
 end.

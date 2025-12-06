@@ -554,6 +554,7 @@ type
     class procedure ApplyKeyValue(ATable: TToml; AKeyValue: TTomlKeyValueSyntax);
     class function ParseInteger(const AText: string): Int64;
     class function ParseFloat(const AText: string): Double;
+    class function ParseDateTime(const AText: string): TDateTime;
   public
     class function BuildFromDocument(ADocument: TTomlDocumentSyntax): TToml;
   end;
@@ -2188,6 +2189,103 @@ begin
     Result := StrToFloat(LClean);
 end;
 
+class function TTomlDomBuilder.ParseDateTime(const AText: string): TDateTime;
+var
+  LDatePart, LTimePart, LOffsetPart: string;
+  LYear, LMonth, LDay: Word;
+  LHour, LMin, LSec: Word;
+  LMSec: Word;
+  LPos, LTPos, LDotPos: Integer;
+  LDate, LTime: TDateTime;
+  LOffsetHours, LOffsetMins: Integer;
+  LIsNegativeOffset: Boolean;
+begin
+  // RFC 3339 DateTime formats:
+  // - Offset DateTime: 1979-05-27T07:32:00-08:00 or 1979-05-27T07:32:00Z
+  // - Local DateTime: 1979-05-27T07:32:00
+  // - Local Date: 1979-05-27
+  // - Local Time: 07:32:00
+
+  // Check if it's a time-only value (no date part)
+  if (Pos('-', AText) = 0) and (Pos('T', AText) = 0) then
+  begin
+    // Local time: 07:32:00 or 07:32:00.999999
+    LTimePart := AText;
+    LDotPos := Pos('.', LTimePart);
+    if LDotPos > 0 then
+      LTimePart := Copy(LTimePart, 1, LDotPos - 1);
+
+    LHour := StrToInt(Copy(LTimePart, 1, 2));
+    LMin := StrToInt(Copy(LTimePart, 4, 2));
+    LSec := StrToInt(Copy(LTimePart, 7, 2));
+
+    Result := EncodeTime(LHour, LMin, LSec, 0);
+    Exit;
+  end;
+
+  // Find T separator (if exists)
+  LTPos := Pos('T', UpperCase(AText));
+
+  if LTPos = 0 then
+  begin
+    // Local date only: 1979-05-27
+    LDatePart := AText;
+    LYear := StrToInt(Copy(LDatePart, 1, 4));
+    LMonth := StrToInt(Copy(LDatePart, 6, 2));
+    LDay := StrToInt(Copy(LDatePart, 9, 2));
+
+    Result := EncodeDate(LYear, LMonth, LDay);
+    Exit;
+  end;
+
+  // Has both date and time
+  LDatePart := Copy(AText, 1, LTPos - 1);
+  LTimePart := Copy(AText, LTPos + 1, Length(AText));
+
+  // Parse date part
+  LYear := StrToInt(Copy(LDatePart, 1, 4));
+  LMonth := StrToInt(Copy(LDatePart, 6, 2));
+  LDay := StrToInt(Copy(LDatePart, 9, 2));
+  LDate := EncodeDate(LYear, LMonth, LDay);
+
+  // Check for timezone offset
+  LPos := Pos('Z', UpperCase(LTimePart));
+  if LPos = 0 then
+    LPos := Pos('+', LTimePart);
+  if LPos = 0 then
+    LPos := Pos('-', LTimePart);
+
+  if LPos > 0 then
+  begin
+    LOffsetPart := Copy(LTimePart, LPos, Length(LTimePart));
+    LTimePart := Copy(LTimePart, 1, LPos - 1);
+
+    // Parse offset if not 'Z'
+    if UpperCase(LOffsetPart) <> 'Z' then
+    begin
+      LIsNegativeOffset := LOffsetPart[1] = '-';
+      LOffsetPart := Copy(LOffsetPart, 2, Length(LOffsetPart));
+      LOffsetHours := StrToInt(Copy(LOffsetPart, 1, 2));
+      LOffsetMins := StrToInt(Copy(LOffsetPart, 4, 2));
+
+      // Note: For simplicity, we store as local time without applying offset
+      // Full implementation would convert to UTC or local timezone
+    end;
+  end;
+
+  // Parse time part (handle fractional seconds)
+  LDotPos := Pos('.', LTimePart);
+  if LDotPos > 0 then
+    LTimePart := Copy(LTimePart, 1, LDotPos - 1);
+
+  LHour := StrToInt(Copy(LTimePart, 1, 2));
+  LMin := StrToInt(Copy(LTimePart, 4, 2));
+  LSec := StrToInt(Copy(LTimePart, 7, 2));
+  LTime := EncodeTime(LHour, LMin, LSec, 0);
+
+  Result := LDate + LTime;
+end;
+
 class function TTomlDomBuilder.ConvertValue(ANode: TTomlSyntaxNode): TTomlValue;
 var
   LValueNode: TTomlValueSyntax;
@@ -2212,7 +2310,7 @@ begin
         Result := TTomlValue.CreateBoolean(LValueNode.Value = 'true');
 
       tkDateTime, tkDate, tkTime:
-        Result := TTomlValue.CreateDateTime(Now);  // Simplified
+        Result := TTomlValue.CreateDateTime(ParseDateTime(LValueNode.Value))
     else
       Result := TTomlValue.CreateString(LValueNode.Value);
     end;
