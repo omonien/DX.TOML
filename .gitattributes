@@ -1,0 +1,22 @@
+# Delphi .gitattributes template
+# Version: 2.0 (keep in sync with Style Guide headers)
+
+# Line endings (text files): enforce CRLF
+*.pas text eol=crlf
+*.dpr text eol=crlf
+*.dpk text eol=crlf
+*.inc text eol=crlf
+*.rc text eol=crlf
+*.dproj text eol=crlf
+
+# Forms/Frames (default: TEXT mode)
+*.dfm text eol=crlf
+*.fmx text eol=crlf
+
+# Binary files
+*.res binary
+*.ico binary
+*.dcu binary
+*.bpl binary
+*.dll binary
+*.exe binary

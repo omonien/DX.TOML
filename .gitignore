@@ -1,0 +1,78 @@
+###############################################################################
+# Delphi .gitignore (Curated)
+# ---------------------------------------------------------------------------
+# This carefully curated .gitignore file is specifically optimized for
+# Embarcadero Delphi development environments, supporting both legacy and
+# modern versions.
+#
+# License: MIT License https://opensource.org/license/mit
+# Version: 2.0 (keep in sync with Style Guide headers)
+
+# Copyright (c) 2025 Olaf Monien
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this file to use without restriction, subject to inclusion of this notice.
+
+*.res
+*.tlb
+*.ddp
+*.exe
+*.dll
+*.bpl
+*.bpi
+*.dcp
+*.so
+*.apk
+*.drc
+*.map
+*.dres
+*.rsm
+*.tds
+*.dcu
+*.lib
+*.a
+*.o
+*.ocx
+*.cfg
+*.hpp
+*Resource.rc
+*.local
+*.identcache
+*.projdata
+*.tvsconfig
+*.dsk
+*.user
+*.dsv
+__history/
+__recovery/
+*.~*
+*.save
+*.cbk
+*.stat
+Release/
+Debug/
+DCU/
+Linux64/
+OSX32/
+OSX64/
+Win32/
+Win64/
+Android/
+TMSWeb/
+.hg/
+.svn/
+modules/
+.DS_Store
+~$*.*
+_Release-Binaries
+GPATH
+GRTAGS
+GTAGS
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.fbpInf
+*.fbl8
+*.fbpbrk
+*.fb8lck

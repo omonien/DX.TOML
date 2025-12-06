@@ -1,0 +1,19 @@
+# Simple key-value pairs
+string = "hello"
+integer = 42
+float = 3.14
+boolean = true
+
+# Arrays
+colors = ["red", "green", "blue"]
+numbers = [1, 2, 3, 4, 5]
+
+# Inline table
+point = { x = 1, y = 2, z = 3 }
+
+[section1]
+key1 = "value1"
+key2 = "value2"
+
+[section2]
+nested_key = "nested_value"

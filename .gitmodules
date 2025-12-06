@@ -1,0 +1,3 @@
+[submodule "Tests/DUnitX"]
+	path = Tests/DUnitX
+	url = https://github.com/VSoftTechnologies/DUnitX.git
