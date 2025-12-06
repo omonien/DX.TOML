@@ -58,22 +58,19 @@ DX.TOML follows a clean three-layer design inspired by [Tomlyn](https://github.c
 
 ```delphi
 uses
-  System.SysUtils,
   DX.TOML;
 
 var
   LToml: TTomlTable;
-  LTomlStr: string;
 begin
-  // Build TOML string
-  LTomlStr := 'title = "TOML Example"' + sLineBreak +
-              sLineBreak +
-              '[owner]' + sLineBreak +
-              'name = "John Doe"' + sLineBreak +
-              'age = 42';
+  // Parse TOML string to runtime model (using Delphi 12+ multiline strings)
+  LToml := TToml.ToModel('''
+    title = "TOML Example"
 
-  // Parse to runtime model
-  LToml := TToml.ToModel(LTomlStr);
+    [owner]
+    name = "John Doe"
+    age = 42
+  ''');
   try
     ShowMessage(LToml['title'].AsString);  // "TOML Example"
     ShowMessage(LToml['owner'].AsTable['name'].AsString);  // "John Doe"
@@ -160,7 +157,7 @@ DX.TOML/
 ## Building
 
 Requirements:
-- Delphi 11.0 Alexandria or later (for inline variables, RTTI)
+- Delphi 12.0 Athens or later (for multiline strings, inline variables, RTTI)
 - DUnitX (included as submodule)
 
 Configuration:
