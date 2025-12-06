@@ -4,54 +4,46 @@ A modern, spec-compliant TOML parser for Delphi with round-trip capability.
 
 ## Features
 
+- **Single-unit library** (~2,500 lines) - just add DX.TOML.pas to your project
 - **TOML 1.0.0 compliant** parser and serializer
 - **Round-trip preservation** of comments, formatting, and whitespace
-- **Three-layer architecture** (AST ≠ DOM ≠ API)
+- **Three-layer architecture** (AST ≠ DOM ≠ API) unified in one file
 - **Type-safe** with full Delphi generics support
 - **Extensively tested** with DUnitX and golden files
-- **INI adapter** for legacy compatibility (optional)
+- **INI adapter** for legacy compatibility (optional, separate unit)
 
 ## Architecture
 
-DX.TOML follows a clean three-layer design inspired by [Tomlyn](https://github.com/xoofx/Tomlyn):
+DX.TOML follows a clean three-layer design inspired by [Tomlyn](https://github.com/xoofx/Tomlyn), unified in a single file:
 
-### 1. AST Layer (Syntax Tree)
-**Purpose**: Exact representation for tooling and round-trip scenarios
+### Single-Unit Structure
 
-- `DX.TOML.AST.pas` - Syntax nodes preserving all formatting details
-- Maintains comments, whitespace, and even invalid tokens
-- Required for IDEs, validators, and format-preserving edits
+**All functionality in one file** (`DX.TOML.pas`, ~2,500 lines):
 
-### 2. DOM Layer (Runtime Model)
-**Purpose**: Convenient runtime access to TOML data
+1. **Lexer** - Tokenization with position tracking
+2. **AST** - Syntax nodes preserving all formatting details for round-trip
+3. **Parser** - TOML 1.0.0 compliant parsing logic
+4. **DOM** - Runtime model (`TToml`, `TTomlArray`, `TTomlValue`)
 
-- `DX.TOML.DOM.pas` - `TToml`, `TTomlArray`, `TTomlValue` classes
-- Dictionary/List-based for intuitive navigation
-- Type-safe value access with Delphi RTTI
-- Integrated load/save methods
+### Public API
 
-### 3. API Layer (Public Interface)
-**Purpose**: Simple, unified interface
-
-- `DX.TOML.pas` - Re-exports types from DOM layer
 - `TToml.FromFile()` / `TToml.FromString()` → Load TOML
 - `TToml.SaveToFile()` / `TToml.ToString()` → Save TOML
 - `TToml.ParseToAST()` → AST for advanced scenarios
+- `TToml.Validate()` → Syntax validation
 
-### Supporting Components
+### Optional Components
 
-- `DX.TOML.Lexer.pas` - Tokenization
-- `DX.TOML.Parser.pas` - Parsing logic
-- `DX.TOML.Model.pas` - Custom type mapping
-- `DX.TOML.Adapter.INI.pas` - INI compatibility layer (adapter pattern)
+- `DX.TOML.Adapter.INI.pas` - INI compatibility adapter (separate unit)
 
 ## Design Principles
 
-1. **AST ≠ DOM ≠ API** - Clear separation of concerns
-2. **Round-trip first** - Preserve formatting by default
-3. **INI as adapter** - Never core dependency
-4. **Spec-driven** - TOML 1.0.0 compliance
-5. **Test-driven** - Extensive test coverage with golden files
+1. **Single-unit simplicity** - Just add DX.TOML.pas to your project
+2. **AST ≠ DOM ≠ API** - Clear separation of concerns (within single file)
+3. **Round-trip first** - Preserve formatting by default
+4. **INI as adapter** - Never core dependency (separate optional unit)
+5. **Spec-driven** - TOML 1.0.0 compliance
+6. **Test-driven** - Extensive test coverage with golden files
 
 ## Quick Start
 
@@ -177,13 +169,8 @@ DX.TOML/
 ├── Docs/
 │   └── Delphi Style Guide EN.md
 ├── Source/
-│   ├── DX.TOML.pas              # Main API
-│   ├── DX.TOML.AST.pas          # AST/Syntax nodes
-│   ├── DX.TOML.DOM.pas          # Runtime model
-│   ├── DX.TOML.Lexer.pas        # Tokenizer
-│   ├── DX.TOML.Parser.pas       # Parser
-│   ├── DX.TOML.Model.pas        # Type mapping
-│   └── DX.TOML.Adapter.INI.pas  # INI adapter
+│   ├── DX.TOML.pas              # Single-unit library (~2,500 lines)
+│   └── DX.TOML.Adapter.INI.pas  # Optional INI adapter
 ├── Tests/
 │   ├── DUnitX/                  # DUnitX framework (submodule)
 │   ├── GoldenFiles/             # Reference TOML files

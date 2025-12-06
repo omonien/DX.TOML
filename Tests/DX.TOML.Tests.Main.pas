@@ -17,11 +17,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.IOUtils,
-  DX.TOML,
-  DX.TOML.Lexer,
-  DX.TOML.Parser,
-  DX.TOML.AST,
-  DX.TOML.DOM;
+  DX.TOML;
 
 type
   [TestFixture]

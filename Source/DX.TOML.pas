@@ -2,8 +2,15 @@
   DX.TOML - TOML Parser for Delphi
 
   Description:
-    Main unit for the DX.TOML library.
-    Simply re-exports DX.TOML.DOM for convenience.
+    A modern, spec-compliant TOML 1.0.0 parser for Delphi with round-trip
+    capability. This is a single-unit library combining lexer, parser, AST,
+    and DOM components.
+
+    Architecture (within single unit):
+    1. Lexer - Tokenization with position tracking
+    2. AST - Abstract Syntax Tree for round-trip preservation
+    3. Parser - TOML 1.0.0 compliant parser
+    4. DOM - Document Object Model for runtime access
 
   Usage:
     uses
@@ -28,22 +35,2475 @@ unit DX.TOML;
 interface
 
 uses
-  DX.TOML.DOM,
-  DX.TOML.AST,
-  DX.TOML.Lexer,
-  DX.TOML.Parser;
+  System.SysUtils,
+  System.Classes,
+  System.Generics.Collections,
+  System.Character,
+  System.Rtti,
+  System.DateUtils,
+  System.IOUtils;
 
 type
-  // Re-export main types from DX.TOML.DOM
-  TToml = DX.TOML.DOM.TToml;
-  TTomlValue = DX.TOML.DOM.TTomlValue;
-  TTomlArray = DX.TOML.DOM.TTomlArray;
-  TTomlValueKind = DX.TOML.DOM.TTomlValueKind;
+  {$REGION 'Forward Declarations'}
+  TTomlToken = class;
+  TTomlLexer = class;
+  TTomlSyntaxNode = class;
+  TTomlDocumentSyntax = class;
+  TTomlParser = class;
+  TTomlValue = class;
+  TToml = class;
+  TTomlArray = class;
+  {$ENDREGION}
 
-  // Re-export AST types for advanced scenarios
-  TTomlDocumentSyntax = DX.TOML.AST.TTomlDocumentSyntax;
-  TTomlSyntaxNode = DX.TOML.AST.TTomlSyntaxNode;
+  {$REGION 'Lexer Types'}
+  /// <summary>TOML token type enumeration</summary>
+  TTomlTokenKind = (
+    // End of file
+    tkEof,
+
+    // Literals
+    tkString,                  // "string" or 'literal string'
+    tkMultiLineString,         // """multi-line""" or '''literal'''
+    tkInteger,                 // 42, 0x1A, 0o755, 0b1010
+    tkFloat,                   // 3.14, 6.02e23
+    tkBoolean,                 // true, false
+    tkDateTime,                // 1979-05-27T07:32:00Z
+    tkDate,                    // 1979-05-27
+    tkTime,                    // 07:32:00
+
+    // Identifiers
+    tkBareKey,                 // bare_key
+
+    // Structural
+    tkDot,                     // .
+    tkComma,                   // ,
+    tkEquals,                  // =
+    tkLeftBracket,             // [
+    tkRightBracket,            // ]
+    tkLeftBrace,               // {
+    tkRightBrace,              // }
+    tkNewLine,                 // \n or \r\n
+
+    // Trivia
+    tkWhitespace,              // spaces, tabs
+    tkComment                  // # comment
+  );
+
+  /// <summary>Token position in source</summary>
+  TTomlPosition = record
+    Line: Integer;
+    Column: Integer;
+    Offset: Integer;
+
+    constructor Create(ALine, AColumn, AOffset: Integer);
+  end;
+
+  /// <summary>Individual token</summary>
+  TTomlToken = class
+  private
+    FKind: TTomlTokenKind;
+    FText: string;
+    FPosition: TTomlPosition;
+  public
+    constructor Create(AKind: TTomlTokenKind; const AText: string; APosition: TTomlPosition);
+
+    property Kind: TTomlTokenKind read FKind;
+    property Text: string read FText;
+    property Position: TTomlPosition read FPosition;
+  end;
+
+  /// <summary>TOML lexer/tokenizer</summary>
+  TTomlLexer = class
+  private
+    FSource: string;
+    FPosition: Integer;
+    FLine: Integer;
+    FColumn: Integer;
+    FTokens: TObjectList<TTomlToken>;
+
+    function GetCurrentChar: Char;
+    function GetLookahead(AOffset: Integer): Char;
+    function IsEof: Boolean;
+
+    procedure Advance(ACount: Integer = 1);
+    function CreatePosition: TTomlPosition;
+
+    procedure ScanWhitespace;
+    procedure ScanComment;
+    procedure ScanNewLine;
+    procedure ScanString(ADelimiter: Char);
+    procedure ScanMultiLineString(ADelimiter: Char);
+    procedure ScanNumber;
+    procedure ScanBareKeyOrKeyword;
+
+    function IsWhitespace(AChar: Char): Boolean;
+    function IsBareKeyChar(AChar: Char): Boolean;
+    function IsDigit(AChar: Char): Boolean;
+    function IsHexDigit(AChar: Char): Boolean;
+  public
+    constructor Create(const ASource: string);
+    destructor Destroy; override;
+
+    /// <summary>Tokenize the entire source</summary>
+    procedure Tokenize;
+
+    /// <summary>Get all tokens</summary>
+    property Tokens: TObjectList<TTomlToken> read FTokens;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'AST Types'}
+  TTomlSyntaxNodeList = TObjectList<TTomlSyntaxNode>;
+
+  /// <summary>Syntax node kind enumeration</summary>
+  TTomlSyntaxKind = (
+    skDocument,
+    skKeyValue,
+    skTable,
+    skArrayOfTables,
+    skKey,
+    skValue,
+    skArray,
+    skInlineTable,
+    skTrivia
+  );
+
+  /// <summary>Base class for all syntax nodes</summary>
+  TTomlSyntaxNode = class abstract
+  private
+    FParent: TTomlSyntaxNode;
+    FChildren: TTomlSyntaxNodeList;
+    FTokens: TList<TTomlToken>;
+  protected
+    function GetKind: TTomlSyntaxKind; virtual; abstract;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    /// <summary>Add a child node</summary>
+    procedure AddChild(ANode: TTomlSyntaxNode);
+
+    /// <summary>Add a token</summary>
+    procedure AddToken(AToken: TTomlToken);
+
+    /// <summary>Get text representation</summary>
+    function ToText: string; virtual;
+
+    property Kind: TTomlSyntaxKind read GetKind;
+    property Parent: TTomlSyntaxNode read FParent write FParent;
+    property Children: TTomlSyntaxNodeList read FChildren;
+    property Tokens: TList<TTomlToken> read FTokens;
+  end;
+
+  /// <summary>Trivia node (whitespace, comments)</summary>
+  TTomlTriviaSyntax = class(TTomlSyntaxNode)
+  protected
+    function GetKind: TTomlSyntaxKind; override;
+  end;
+
+  /// <summary>Value syntax node</summary>
+  TTomlValueSyntax = class(TTomlSyntaxNode)
+  private
+    FValue: string;
+    FValueKind: TTomlTokenKind;
+  protected
+    function GetKind: TTomlSyntaxKind; override;
+  public
+    constructor Create(AValueKind: TTomlTokenKind; const AValue: string);
+
+    function ToText: string; override;
+
+    property Value: string read FValue;
+    property ValueKind: TTomlTokenKind read FValueKind;
+  end;
+
+  /// <summary>Key syntax node</summary>
+  TTomlKeySyntax = class(TTomlSyntaxNode)
+  private
+    FSegments: TList<string>;
+  protected
+    function GetKind: TTomlSyntaxKind; override;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    /// <summary>Add a key segment</summary>
+    procedure AddSegment(const ASegment: string);
+
+    /// <summary>Get full dotted key</summary>
+    function GetFullKey: string;
+
+    function ToText: string; override;
+
+    property Segments: TList<string> read FSegments;
+  end;
+
+  /// <summary>Array syntax node</summary>
+  TTomlArraySyntax = class(TTomlSyntaxNode)
+  private
+    FElements: TTomlSyntaxNodeList;
+  protected
+    function GetKind: TTomlSyntaxKind; override;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    /// <summary>Add an element to the array</summary>
+    procedure AddElement(AElement: TTomlSyntaxNode);
+
+    function ToText: string; override;
+
+    property Elements: TTomlSyntaxNodeList read FElements;
+  end;
+
+  /// <summary>Inline table syntax node</summary>
+  TTomlInlineTableSyntax = class(TTomlSyntaxNode)
+  private
+    FKeyValues: TTomlSyntaxNodeList;
+  protected
+    function GetKind: TTomlSyntaxKind; override;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    /// <summary>Add a key-value pair</summary>
+    procedure AddKeyValue(AKeyValue: TTomlSyntaxNode);
+
+    function ToText: string; override;
+
+    property KeyValues: TTomlSyntaxNodeList read FKeyValues;
+  end;
+
+  /// <summary>Key-value pair syntax node</summary>
+  TTomlKeyValueSyntax = class(TTomlSyntaxNode)
+  private
+    FKey: TTomlKeySyntax;
+    FValue: TTomlSyntaxNode;
+  protected
+    function GetKind: TTomlSyntaxKind; override;
+  public
+    constructor Create(AKey: TTomlKeySyntax; AValue: TTomlSyntaxNode);
+
+    function ToText: string; override;
+
+    property Key: TTomlKeySyntax read FKey;
+    property Value: TTomlSyntaxNode read FValue;
+  end;
+
+  /// <summary>Table header syntax node</summary>
+  TTomlTableSyntax = class(TTomlSyntaxNode)
+  private
+    FKey: TTomlKeySyntax;
+    FIsArrayOfTables: Boolean;
+    FKeyValues: TTomlSyntaxNodeList;
+  protected
+    function GetKind: TTomlSyntaxKind; override;
+  public
+    constructor Create(AKey: TTomlKeySyntax; AIsArrayOfTables: Boolean);
+    destructor Destroy; override;
+
+    /// <summary>Add a key-value pair to this table</summary>
+    procedure AddKeyValue(AKeyValue: TTomlKeyValueSyntax);
+
+    function ToText: string; override;
+
+    property Key: TTomlKeySyntax read FKey;
+    property IsArrayOfTables: Boolean read FIsArrayOfTables;
+    property KeyValues: TTomlSyntaxNodeList read FKeyValues;
+  end;
+
+  /// <summary>Document root syntax node</summary>
+  TTomlDocumentSyntax = class(TTomlSyntaxNode)
+  private
+    FTables: TTomlSyntaxNodeList;
+    FKeyValues: TTomlSyntaxNodeList;
+  protected
+    function GetKind: TTomlSyntaxKind; override;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    /// <summary>Add a table to the document</summary>
+    procedure AddTable(ATable: TTomlTableSyntax);
+
+    /// <summary>Add a top-level key-value pair</summary>
+    procedure AddKeyValue(AKeyValue: TTomlKeyValueSyntax);
+
+    function ToText: string; override;
+
+    property Tables: TTomlSyntaxNodeList read FTables;
+    property KeyValues: TTomlSyntaxNodeList read FKeyValues;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'Parser Types'}
+  /// <summary>Parser exception</summary>
+  ETomlParserException = class(Exception)
+  private
+    FPosition: TTomlPosition;
+  public
+    constructor Create(const AMessage: string; APosition: TTomlPosition);
+
+    property Position: TTomlPosition read FPosition;
+  end;
+
+  /// <summary>TOML parser</summary>
+  TTomlParser = class
+  private
+    FLexer: TTomlLexer;
+    FTokens: TObjectList<TTomlToken>;
+    FPosition: Integer;
+    FDocument: TTomlDocumentSyntax;
+
+    function GetCurrentToken: TTomlToken;
+    function GetLookahead(AOffset: Integer): TTomlToken;
+    function IsEof: Boolean;
+
+    procedure Advance;
+    function Expect(AKind: TTomlTokenKind): TTomlToken;
+    function Match(AKind: TTomlTokenKind): Boolean;
+    procedure SkipTrivia;
+
+    function ParseDocument: TTomlDocumentSyntax;
+    function ParseKeyValue: TTomlKeyValueSyntax;
+    function ParseKey: TTomlKeySyntax;
+    function ParseValue: TTomlSyntaxNode;
+    function ParseArray: TTomlArraySyntax;
+    function ParseInlineTable: TTomlInlineTableSyntax;
+    function ParseTable: TTomlTableSyntax;
+    function ParseString(const AText: string): string;
+
+    procedure Error(const AMessage: string);
+  public
+    constructor Create(ALexer: TTomlLexer);
+    destructor Destroy; override;
+
+    /// <summary>Parse tokens into AST</summary>
+    function Parse: TTomlDocumentSyntax;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'DOM Types'}
+  /// <summary>TOML value type enumeration</summary>
+  TTomlValueKind = (
+    tvkString,
+    tvkInteger,
+    tvkFloat,
+    tvkBoolean,
+    tvkDateTime,
+    tvkDate,
+    tvkTime,
+    tvkArray,
+    tvkTable
+  );
+
+  /// <summary>TOML value wrapper</summary>
+  TTomlValue = class
+  private
+    FKind: TTomlValueKind;
+    FValue: TValue;
+    FTable: TToml;
+    FArray: TTomlArray;
+
+    function GetAsString: string;
+    function GetAsInteger: Int64;
+    function GetAsFloat: Double;
+    function GetAsBoolean: Boolean;
+    function GetAsDateTime: TDateTime;
+    function GetAsTable: TToml;
+    function GetAsArray: TTomlArray;
+  public
+    constructor CreateString(const AValue: string);
+    constructor CreateInteger(AValue: Int64);
+    constructor CreateFloat(AValue: Double);
+    constructor CreateBoolean(AValue: Boolean);
+    constructor CreateDateTime(AValue: TDateTime);
+    constructor CreateTable(ATable: TToml);
+    constructor CreateArray(AArray: TTomlArray);
+    destructor Destroy; override;
+
+    /// <summary>Check if value is of specific kind</summary>
+    function IsKind(AKind: TTomlValueKind): Boolean;
+
+    property Kind: TTomlValueKind read FKind;
+    property AsString: string read GetAsString;
+    property AsInteger: Int64 read GetAsInteger;
+    property AsFloat: Double read GetAsFloat;
+    property AsBoolean: Boolean read GetAsBoolean;
+    property AsDateTime: TDateTime read GetAsDateTime;
+    property AsTable: TToml read GetAsTable;
+    property AsArray: TTomlArray read GetAsArray;
+  end;
+
+  /// <summary>TOML array (list of values)</summary>
+  TTomlArray = class
+  private
+    FItems: TObjectList<TTomlValue>;
+
+    function GetCount: Integer;
+    function GetItem(AIndex: Integer): TTomlValue;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    /// <summary>Add a value to the array</summary>
+    procedure Add(AValue: TTomlValue);
+
+    /// <summary>Add a string value</summary>
+    procedure AddString(const AValue: string);
+
+    /// <summary>Add an integer value</summary>
+    procedure AddInteger(AValue: Int64);
+
+    /// <summary>Add a float value</summary>
+    procedure AddFloat(AValue: Double);
+
+    /// <summary>Add a boolean value</summary>
+    procedure AddBoolean(AValue: Boolean);
+
+    property Count: Integer read GetCount;
+    property Items[AIndex: Integer]: TTomlValue read GetItem; default;
+  end;
+
+  /// <summary>TOML document - main class for parsing and manipulating TOML data</summary>
+  TToml = class
+  private
+    FValues: TObjectDictionary<string, TTomlValue>;
+
+    function GetValue(const AKey: string): TTomlValue;
+    function GetKeys: TArray<string>;
+
+    class function InternalParse(const ASource: string): TTomlDocumentSyntax;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    /// <summary>Load TOML from file</summary>
+    /// <param name="AFileName">Path to TOML file</param>
+    /// <returns>New TToml instance</returns>
+    class function FromFile(const AFileName: string): TToml;
+
+    /// <summary>Load TOML from string</summary>
+    /// <param name="ASource">TOML source string</param>
+    /// <returns>New TToml instance</returns>
+    class function FromString(const ASource: string): TToml;
+
+    /// <summary>Parse TOML string to AST (for advanced scenarios)</summary>
+    /// <param name="ASource">TOML source string</param>
+    /// <returns>Document syntax tree with full formatting preservation</returns>
+    class function ParseToAST(const ASource: string): TTomlDocumentSyntax;
+
+    /// <summary>Validate TOML syntax without building model</summary>
+    /// <param name="ASource">TOML source string</param>
+    /// <param name="AErrorMessage">Error message if validation fails</param>
+    /// <returns>True if valid, False otherwise</returns>
+    class function Validate(const ASource: string; out AErrorMessage: string): Boolean;
+
+    /// <summary>Save TOML to file</summary>
+    /// <param name="AFileName">Path to output file</param>
+    procedure SaveToFile(const AFileName: string);
+
+    /// <summary>Convert to TOML string</summary>
+    /// <returns>TOML formatted string</returns>
+    function ToString: string; override;
+
+    /// <summary>Check if key exists</summary>
+    function ContainsKey(const AKey: string): Boolean;
+
+    /// <summary>Try to get a value by key</summary>
+    function TryGetValue(const AKey: string; out AValue: TTomlValue): Boolean;
+
+    /// <summary>Set a value</summary>
+    procedure SetValue(const AKey: string; AValue: TTomlValue);
+
+    /// <summary>Set a string value</summary>
+    procedure SetString(const AKey: string; const AValue: string);
+
+    /// <summary>Set an integer value</summary>
+    procedure SetInteger(const AKey: string; AValue: Int64);
+
+    /// <summary>Set a float value</summary>
+    procedure SetFloat(const AKey: string; AValue: Double);
+
+    /// <summary>Set a boolean value</summary>
+    procedure SetBoolean(const AKey: string; AValue: Boolean);
+
+    /// <summary>Remove a key from the table</summary>
+    /// <returns>True if key was removed, False if key didn't exist</returns>
+    function RemoveKey(const AKey: string): Boolean;
+
+    /// <summary>Clear all keys from the table</summary>
+    procedure Clear;
+
+    /// <summary>Get or create a nested table</summary>
+    function GetOrCreateTable(const AKey: string): TToml;
+
+    /// <summary>Get or create a nested array</summary>
+    function GetOrCreateArray(const AKey: string): TTomlArray;
+
+    property Values[const AKey: string]: TTomlValue read GetValue; default;
+    property Keys: TArray<string> read GetKeys;
+  end;
+
+  /// <summary>AST to DOM converter (internal)</summary>
+  TTomlDomBuilder = class
+  private
+    class function ConvertValue(ANode: TTomlSyntaxNode): TTomlValue;
+    class function ConvertArray(ANode: TTomlArraySyntax): TTomlArray;
+    class function ConvertInlineTable(ANode: TTomlInlineTableSyntax): TToml;
+    class procedure ApplyKeyValue(ATable: TToml; AKeyValue: TTomlKeyValueSyntax);
+    class function ParseInteger(const AText: string): Int64;
+    class function ParseFloat(const AText: string): Double;
+  public
+    class function BuildFromDocument(ADocument: TTomlDocumentSyntax): TToml;
+  end;
+
+  /// <summary>TOML serializer (internal)</summary>
+  TTomlSerializer = class
+  private
+    FBuilder: TStringBuilder;
+
+    procedure WriteValue(AValue: TTomlValue);
+    procedure WriteArray(AArray: TTomlArray);
+    procedure WriteTable(const APath: string; ATable: TToml);
+    procedure WriteInlineTable(ATable: TToml);
+    procedure WriteKeyValue(const AKey: string; AValue: TTomlValue);
+    function EscapeString(const AValue: string): string;
+    function NeedsQuotes(const AKey: string): Boolean;
+    function QuoteKey(const AKey: string): string;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    function Serialize(ATable: TToml): string;
+  end;
+  {$ENDREGION}
 
 implementation
+
+{$REGION 'Lexer Implementation'}
+
+{ TTomlPosition }
+
+constructor TTomlPosition.Create(ALine, AColumn, AOffset: Integer);
+begin
+  Line := ALine;
+  Column := AColumn;
+  Offset := AOffset;
+end;
+
+{ TTomlToken }
+
+constructor TTomlToken.Create(AKind: TTomlTokenKind; const AText: string; APosition: TTomlPosition);
+begin
+  inherited Create;
+  FKind := AKind;
+  FText := AText;
+  FPosition := APosition;
+end;
+
+{ TTomlLexer }
+
+constructor TTomlLexer.Create(const ASource: string);
+begin
+  inherited Create;
+  FSource := ASource;
+  FPosition := 1;  // Delphi strings are 1-based
+  FLine := 1;
+  FColumn := 1;
+  FTokens := TObjectList<TTomlToken>.Create(True);
+end;
+
+destructor TTomlLexer.Destroy;
+begin
+  FTokens.Free;
+  inherited;
+end;
+
+function TTomlLexer.GetCurrentChar: Char;
+begin
+  if IsEof then
+    Result := #0
+  else
+    Result := FSource[FPosition];
+end;
+
+function TTomlLexer.GetLookahead(AOffset: Integer): Char;
+var
+  LPos: Integer;
+begin
+  LPos := FPosition + AOffset;
+  if (LPos < 1) or (LPos > Length(FSource)) then
+    Result := #0
+  else
+    Result := FSource[LPos];
+end;
+
+function TTomlLexer.IsEof: Boolean;
+begin
+  Result := FPosition > Length(FSource);
+end;
+
+procedure TTomlLexer.Advance(ACount: Integer);
+var
+  i: Integer;
+begin
+  for i := 1 to ACount do
+  begin
+    if not IsEof then
+    begin
+      Inc(FPosition);
+      Inc(FColumn);
+    end;
+  end;
+end;
+
+function TTomlLexer.CreatePosition: TTomlPosition;
+begin
+  Result := TTomlPosition.Create(FLine, FColumn, FPosition);
+end;
+
+function TTomlLexer.IsWhitespace(AChar: Char): Boolean;
+begin
+  Result := (AChar = ' ') or (AChar = #9);  // Space or Tab
+end;
+
+function TTomlLexer.IsBareKeyChar(AChar: Char): Boolean;
+begin
+  Result := AChar.IsLetterOrDigit or (AChar = '_') or (AChar = '-');
+end;
+
+function TTomlLexer.IsDigit(AChar: Char): Boolean;
+begin
+  Result := AChar.IsDigit;
+end;
+
+function TTomlLexer.IsHexDigit(AChar: Char): Boolean;
+begin
+  Result := AChar.IsDigit or (AChar in ['a'..'f', 'A'..'F']);
+end;
+
+procedure TTomlLexer.ScanWhitespace;
+var
+  LStart: TTomlPosition;
+  LText: string;
+begin
+  LStart := CreatePosition;
+  LText := '';
+
+  while not IsEof and IsWhitespace(GetCurrentChar) do
+  begin
+    LText := LText + GetCurrentChar;
+    Advance;
+  end;
+
+  FTokens.Add(TTomlToken.Create(tkWhitespace, LText, LStart));
+end;
+
+procedure TTomlLexer.ScanComment;
+var
+  LStart: TTomlPosition;
+  LText: string;
+begin
+  LStart := CreatePosition;
+  LText := '';
+
+  // Skip '#'
+  LText := LText + GetCurrentChar;
+  Advance;
+
+  // Read until end of line
+  while not IsEof and not (GetCurrentChar in [#10, #13]) do
+  begin
+    LText := LText + GetCurrentChar;
+    Advance;
+  end;
+
+  FTokens.Add(TTomlToken.Create(tkComment, LText, LStart));
+end;
+
+procedure TTomlLexer.ScanNewLine;
+var
+  LStart: TTomlPosition;
+  LText: string;
+begin
+  LStart := CreatePosition;
+  LText := '';
+
+  // Handle \r\n or \n
+  if GetCurrentChar = #13 then
+  begin
+    LText := LText + GetCurrentChar;
+    Advance;
+  end;
+
+  if GetCurrentChar = #10 then
+  begin
+    LText := LText + GetCurrentChar;
+    Advance;
+  end;
+
+  Inc(FLine);
+  FColumn := 1;
+
+  FTokens.Add(TTomlToken.Create(tkNewLine, LText, LStart));
+end;
+
+procedure TTomlLexer.ScanString(ADelimiter: Char);
+var
+  LStart: TTomlPosition;
+  LText: string;
+  LEscaped: Boolean;
+begin
+  LStart := CreatePosition;
+  LText := '';
+
+  // Skip opening delimiter
+  LText := LText + GetCurrentChar;
+  Advance;
+
+  LEscaped := False;
+  while not IsEof do
+  begin
+    if LEscaped then
+    begin
+      LText := LText + GetCurrentChar;
+      Advance;
+      LEscaped := False;
+    end
+    else if GetCurrentChar = '\' then
+    begin
+      LText := LText + GetCurrentChar;
+      Advance;
+      LEscaped := True;
+    end
+    else if GetCurrentChar = ADelimiter then
+    begin
+      LText := LText + GetCurrentChar;
+      Advance;
+      Break;
+    end
+    else
+    begin
+      LText := LText + GetCurrentChar;
+      Advance;
+    end;
+  end;
+
+  FTokens.Add(TTomlToken.Create(tkString, LText, LStart));
+end;
+
+procedure TTomlLexer.ScanMultiLineString(ADelimiter: Char);
+var
+  LStart: TTomlPosition;
+  LText: string;
+  LQuoteCount: Integer;
+begin
+  LStart := CreatePosition;
+  LText := '';
+
+  // Skip opening triple delimiter
+  LText := LText + GetCurrentChar;
+  Advance;
+  LText := LText + GetCurrentChar;
+  Advance;
+  LText := LText + GetCurrentChar;
+  Advance;
+
+  while not IsEof do
+  begin
+    if GetCurrentChar = ADelimiter then
+    begin
+      // Count consecutive quotes
+      LQuoteCount := 0;
+      while (not IsEof) and (GetCurrentChar = ADelimiter) and (LQuoteCount < 3) do
+      begin
+        LText := LText + GetCurrentChar;
+        Advance;
+        Inc(LQuoteCount);
+      end;
+
+      if LQuoteCount = 3 then
+        Break;
+    end
+    else
+    begin
+      if GetCurrentChar = #10 then
+      begin
+        Inc(FLine);
+        FColumn := 0;  // Will be incremented by Advance
+      end;
+      LText := LText + GetCurrentChar;
+      Advance;
+    end;
+  end;
+
+  FTokens.Add(TTomlToken.Create(tkMultiLineString, LText, LStart));
+end;
+
+procedure TTomlLexer.ScanNumber;
+var
+  LStart: TTomlPosition;
+  LText: string;
+  LKind: TTomlTokenKind;
+begin
+  LStart := CreatePosition;
+  LText := '';
+  LKind := tkInteger;
+
+  // Handle sign
+  if GetCurrentChar in ['+', '-'] then
+  begin
+    LText := LText + GetCurrentChar;
+    Advance;
+  end;
+
+  // Handle special prefixes (0x, 0o, 0b)
+  if (GetCurrentChar = '0') and (GetLookahead(1) in ['x', 'o', 'b']) then
+  begin
+    LText := LText + GetCurrentChar;
+    Advance;
+    LText := LText + GetCurrentChar;
+    Advance;
+
+    // Read hex/octal/binary digits
+    while not IsEof and (IsBareKeyChar(GetCurrentChar) or IsDigit(GetCurrentChar)) do
+    begin
+      LText := LText + GetCurrentChar;
+      Advance;
+    end;
+  end
+  else
+  begin
+    // Read digits
+    while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar = '_')) do
+    begin
+      LText := LText + GetCurrentChar;
+      Advance;
+    end;
+
+    // Check for float
+    if GetCurrentChar = '.' then
+    begin
+      LKind := tkFloat;
+      LText := LText + GetCurrentChar;
+      Advance;
+
+      while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar = '_')) do
+      begin
+        LText := LText + GetCurrentChar;
+        Advance;
+      end;
+    end;
+
+    // Check for exponent
+    if GetCurrentChar in ['e', 'E'] then
+    begin
+      LKind := tkFloat;
+      LText := LText + GetCurrentChar;
+      Advance;
+
+      if GetCurrentChar in ['+', '-'] then
+      begin
+        LText := LText + GetCurrentChar;
+        Advance;
+      end;
+
+      while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar = '_')) do
+      begin
+        LText := LText + GetCurrentChar;
+        Advance;
+      end;
+    end;
+  end;
+
+  FTokens.Add(TTomlToken.Create(LKind, LText, LStart));
+end;
+
+procedure TTomlLexer.ScanBareKeyOrKeyword;
+var
+  LStart: TTomlPosition;
+  LText: string;
+  LKind: TTomlTokenKind;
+begin
+  LStart := CreatePosition;
+  LText := '';
+  LKind := tkBareKey;
+
+  while not IsEof and IsBareKeyChar(GetCurrentChar) do
+  begin
+    LText := LText + GetCurrentChar;
+    Advance;
+  end;
+
+  // Check for keywords
+  if LText = 'true' then
+    LKind := tkBoolean
+  else if LText = 'false' then
+    LKind := tkBoolean
+  else if LText = 'inf' then
+    LKind := tkFloat
+  else if LText = 'nan' then
+    LKind := tkFloat;
+
+  FTokens.Add(TTomlToken.Create(LKind, LText, LStart));
+end;
+
+procedure TTomlLexer.Tokenize;
+var
+  LChar: Char;
+begin
+  while not IsEof do
+  begin
+    LChar := GetCurrentChar;
+
+    case LChar of
+      ' ', #9:
+        ScanWhitespace;
+
+      '#':
+        ScanComment;
+
+      #13, #10:
+        ScanNewLine;
+
+      '"':
+        if (GetLookahead(1) = '"') and (GetLookahead(2) = '"') then
+          ScanMultiLineString('"')
+        else
+          ScanString('"');
+
+      '''':
+        if (GetLookahead(1) = '''') and (GetLookahead(2) = '''') then
+          ScanMultiLineString('''')
+        else
+          ScanString('''');
+
+      '.':
+        begin
+          FTokens.Add(TTomlToken.Create(tkDot, '.', CreatePosition));
+          Advance;
+        end;
+
+      ',':
+        begin
+          FTokens.Add(TTomlToken.Create(tkComma, ',', CreatePosition));
+          Advance;
+        end;
+
+      '=':
+        begin
+          FTokens.Add(TTomlToken.Create(tkEquals, '=', CreatePosition));
+          Advance;
+        end;
+
+      '[':
+        begin
+          FTokens.Add(TTomlToken.Create(tkLeftBracket, '[', CreatePosition));
+          Advance;
+        end;
+
+      ']':
+        begin
+          FTokens.Add(TTomlToken.Create(tkRightBracket, ']', CreatePosition));
+          Advance;
+        end;
+
+      '{':
+        begin
+          FTokens.Add(TTomlToken.Create(tkLeftBrace, '{', CreatePosition));
+          Advance;
+        end;
+
+      '}':
+        begin
+          FTokens.Add(TTomlToken.Create(tkRightBrace, '}', CreatePosition));
+          Advance;
+        end;
+
+      '0'..'9', '+', '-':
+        ScanNumber;
+    else
+      if IsBareKeyChar(LChar) then
+        ScanBareKeyOrKeyword
+      else
+        Advance;  // Skip unknown character
+    end;
+  end;
+
+  // Add EOF token
+  FTokens.Add(TTomlToken.Create(tkEof, '', CreatePosition));
+end;
+
+{$ENDREGION}
+
+{$REGION 'AST Implementation'}
+
+{ TTomlSyntaxNode }
+
+constructor TTomlSyntaxNode.Create;
+begin
+  inherited Create;
+  FChildren := TTomlSyntaxNodeList.Create(True);
+  FTokens := TList<TTomlToken>.Create;
+end;
+
+destructor TTomlSyntaxNode.Destroy;
+begin
+  FTokens.Free;
+  FChildren.Free;
+  inherited;
+end;
+
+procedure TTomlSyntaxNode.AddChild(ANode: TTomlSyntaxNode);
+begin
+  ANode.Parent := Self;
+  FChildren.Add(ANode);
+end;
+
+procedure TTomlSyntaxNode.AddToken(AToken: TTomlToken);
+begin
+  FTokens.Add(AToken);
+end;
+
+function TTomlSyntaxNode.ToText: string;
+var
+  LToken: TTomlToken;
+begin
+  Result := '';
+  for LToken in FTokens do
+    Result := Result + LToken.Text;
+end;
+
+{ TTomlTriviaSyntax }
+
+function TTomlTriviaSyntax.GetKind: TTomlSyntaxKind;
+begin
+  Result := skTrivia;
+end;
+
+{ TTomlValueSyntax }
+
+constructor TTomlValueSyntax.Create(AValueKind: TTomlTokenKind; const AValue: string);
+begin
+  inherited Create;
+  FValueKind := AValueKind;
+  FValue := AValue;
+end;
+
+function TTomlValueSyntax.GetKind: TTomlSyntaxKind;
+begin
+  Result := skValue;
+end;
+
+function TTomlValueSyntax.ToText: string;
+begin
+  Result := FValue;
+end;
+
+{ TTomlKeySyntax }
+
+constructor TTomlKeySyntax.Create;
+begin
+  inherited Create;
+  FSegments := TList<string>.Create;
+end;
+
+destructor TTomlKeySyntax.Destroy;
+begin
+  FSegments.Free;
+  inherited;
+end;
+
+procedure TTomlKeySyntax.AddSegment(const ASegment: string);
+begin
+  FSegments.Add(ASegment);
+end;
+
+function TTomlKeySyntax.GetFullKey: string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to FSegments.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + '.';
+    Result := Result + FSegments[i];
+  end;
+end;
+
+function TTomlKeySyntax.GetKind: TTomlSyntaxKind;
+begin
+  Result := skKey;
+end;
+
+function TTomlKeySyntax.ToText: string;
+begin
+  Result := GetFullKey;
+end;
+
+{ TTomlArraySyntax }
+
+constructor TTomlArraySyntax.Create;
+begin
+  inherited Create;
+  FElements := TTomlSyntaxNodeList.Create(False);  // Elements are owned by Children
+end;
+
+destructor TTomlArraySyntax.Destroy;
+begin
+  FElements.Free;
+  inherited;
+end;
+
+procedure TTomlArraySyntax.AddElement(AElement: TTomlSyntaxNode);
+begin
+  FElements.Add(AElement);
+  AddChild(AElement);
+end;
+
+function TTomlArraySyntax.GetKind: TTomlSyntaxKind;
+begin
+  Result := skArray;
+end;
+
+function TTomlArraySyntax.ToText: string;
+var
+  i: Integer;
+begin
+  Result := '[';
+  for i := 0 to FElements.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FElements[i].ToText;
+  end;
+  Result := Result + ']';
+end;
+
+{ TTomlInlineTableSyntax }
+
+constructor TTomlInlineTableSyntax.Create;
+begin
+  inherited Create;
+  FKeyValues := TTomlSyntaxNodeList.Create(False);  // Owned by Children
+end;
+
+destructor TTomlInlineTableSyntax.Destroy;
+begin
+  FKeyValues.Free;
+  inherited;
+end;
+
+procedure TTomlInlineTableSyntax.AddKeyValue(AKeyValue: TTomlSyntaxNode);
+begin
+  FKeyValues.Add(AKeyValue);
+  AddChild(AKeyValue);
+end;
+
+function TTomlInlineTableSyntax.GetKind: TTomlSyntaxKind;
+begin
+  Result := skInlineTable;
+end;
+
+function TTomlInlineTableSyntax.ToText: string;
+var
+  i: Integer;
+begin
+  Result := '{ ';
+  for i := 0 to FKeyValues.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + ', ';
+    Result := Result + FKeyValues[i].ToText;
+  end;
+  Result := Result + ' }';
+end;
+
+{ TTomlKeyValueSyntax }
+
+constructor TTomlKeyValueSyntax.Create(AKey: TTomlKeySyntax; AValue: TTomlSyntaxNode);
+begin
+  inherited Create;
+  FKey := AKey;
+  FValue := AValue;
+  AddChild(AKey);
+  AddChild(AValue);
+end;
+
+function TTomlKeyValueSyntax.GetKind: TTomlSyntaxKind;
+begin
+  Result := skKeyValue;
+end;
+
+function TTomlKeyValueSyntax.ToText: string;
+begin
+  Result := FKey.ToText + ' = ' + FValue.ToText;
+end;
+
+{ TTomlTableSyntax }
+
+constructor TTomlTableSyntax.Create(AKey: TTomlKeySyntax; AIsArrayOfTables: Boolean);
+begin
+  inherited Create;
+  FKey := AKey;
+  FIsArrayOfTables := AIsArrayOfTables;
+  FKeyValues := TTomlSyntaxNodeList.Create(False);  // Owned by Children
+  AddChild(AKey);
+end;
+
+destructor TTomlTableSyntax.Destroy;
+begin
+  FKeyValues.Free;
+  inherited;
+end;
+
+procedure TTomlTableSyntax.AddKeyValue(AKeyValue: TTomlKeyValueSyntax);
+begin
+  FKeyValues.Add(AKeyValue);
+  AddChild(AKeyValue);
+end;
+
+function TTomlTableSyntax.GetKind: TTomlSyntaxKind;
+begin
+  if FIsArrayOfTables then
+    Result := skArrayOfTables
+  else
+    Result := skTable;
+end;
+
+function TTomlTableSyntax.ToText: string;
+var
+  i: Integer;
+begin
+  if FIsArrayOfTables then
+    Result := '[[' + FKey.ToText + ']]'
+  else
+    Result := '[' + FKey.ToText + ']';
+
+  Result := Result + sLineBreak;
+
+  for i := 0 to FKeyValues.Count - 1 do
+    Result := Result + FKeyValues[i].ToText + sLineBreak;
+end;
+
+{ TTomlDocumentSyntax }
+
+constructor TTomlDocumentSyntax.Create;
+begin
+  inherited Create;
+  FTables := TTomlSyntaxNodeList.Create(False);  // Owned by Children
+  FKeyValues := TTomlSyntaxNodeList.Create(False);  // Owned by Children
+end;
+
+destructor TTomlDocumentSyntax.Destroy;
+begin
+  FKeyValues.Free;
+  FTables.Free;
+  inherited;
+end;
+
+procedure TTomlDocumentSyntax.AddTable(ATable: TTomlTableSyntax);
+begin
+  FTables.Add(ATable);
+  AddChild(ATable);
+end;
+
+procedure TTomlDocumentSyntax.AddKeyValue(AKeyValue: TTomlKeyValueSyntax);
+begin
+  FKeyValues.Add(AKeyValue);
+  AddChild(AKeyValue);
+end;
+
+function TTomlDocumentSyntax.GetKind: TTomlSyntaxKind;
+begin
+  Result := skDocument;
+end;
+
+function TTomlDocumentSyntax.ToText: string;
+var
+  i: Integer;
+begin
+  Result := '';
+
+  // Top-level key-values
+  for i := 0 to FKeyValues.Count - 1 do
+    Result := Result + FKeyValues[i].ToText + sLineBreak;
+
+  if FKeyValues.Count > 0 then
+    Result := Result + sLineBreak;
+
+  // Tables
+  for i := 0 to FTables.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + sLineBreak;
+    Result := Result + FTables[i].ToText;
+  end;
+end;
+
+{$ENDREGION}
+
+{$REGION 'Parser Implementation'}
+
+{ ETomlParserException }
+
+constructor ETomlParserException.Create(const AMessage: string; APosition: TTomlPosition);
+begin
+  inherited Create(AMessage);
+  FPosition := APosition;
+end;
+
+{ TTomlParser }
+
+constructor TTomlParser.Create(ALexer: TTomlLexer);
+begin
+  inherited Create;
+  FLexer := ALexer;
+  FTokens := ALexer.Tokens;
+  FPosition := 0;
+end;
+
+destructor TTomlParser.Destroy;
+begin
+  if Assigned(FDocument) then
+    FDocument.Free;
+  inherited;
+end;
+
+function TTomlParser.GetCurrentToken: TTomlToken;
+begin
+  if IsEof then
+    Result := FTokens[FTokens.Count - 1]  // Return EOF token
+  else
+    Result := FTokens[FPosition];
+end;
+
+function TTomlParser.GetLookahead(AOffset: Integer): TTomlToken;
+var
+  LPos: Integer;
+begin
+  LPos := FPosition + AOffset;
+  if (LPos < 0) or (LPos >= FTokens.Count) then
+    Result := FTokens[FTokens.Count - 1]  // Return EOF token
+  else
+    Result := FTokens[LPos];
+end;
+
+function TTomlParser.IsEof: Boolean;
+begin
+  Result := (FPosition >= FTokens.Count) or (GetCurrentToken.Kind = tkEof);
+end;
+
+procedure TTomlParser.Advance;
+begin
+  if not IsEof then
+    Inc(FPosition);
+end;
+
+function TTomlParser.Expect(AKind: TTomlTokenKind): TTomlToken;
+begin
+  if GetCurrentToken.Kind <> AKind then
+    Error('Expected ' + GetEnumName(TypeInfo(TTomlTokenKind), Ord(AKind)) +
+          ' but got ' + GetEnumName(TypeInfo(TTomlTokenKind), Ord(GetCurrentToken.Kind)));
+
+  Result := GetCurrentToken;
+  Advance;
+end;
+
+function TTomlParser.Match(AKind: TTomlTokenKind): Boolean;
+begin
+  Result := GetCurrentToken.Kind = AKind;
+end;
+
+procedure TTomlParser.SkipTrivia;
+begin
+  while not IsEof and (GetCurrentToken.Kind in [tkWhitespace, tkComment]) do
+    Advance;
+end;
+
+procedure TTomlParser.Error(const AMessage: string);
+begin
+  raise ETomlParserException.Create(AMessage, GetCurrentToken.Position);
+end;
+
+function TTomlParser.ParseString(const AText: string): string;
+var
+  i: Integer;
+  LInString: Boolean;
+  LChar: Char;
+begin
+  Result := '';
+  LInString := False;
+
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    LChar := AText[i];
+
+    if not LInString then
+    begin
+      if LChar in ['"', ''''] then
+        LInString := True;
+      Inc(i);
+      Continue;
+    end;
+
+    if LChar = '\' then
+    begin
+      // Handle escape sequences
+      Inc(i);
+      if i <= Length(AText) then
+      begin
+        case AText[i] of
+          'n': Result := Result + #10;
+          'r': Result := Result + #13;
+          't': Result := Result + #9;
+          '\': Result := Result + '\';
+          '"': Result := Result + '"';
+          '''': Result := Result + '''';
+        else
+          Result := Result + AText[i];
+        end;
+      end;
+    end
+    else if LChar in ['"', ''''] then
+    begin
+      LInString := False;
+    end
+    else
+    begin
+      Result := Result + LChar;
+    end;
+
+    Inc(i);
+  end;
+end;
+
+function TTomlParser.ParseKey: TTomlKeySyntax;
+var
+  LKey: TTomlKeySyntax;
+  LToken: TTomlToken;
+begin
+  LKey := TTomlKeySyntax.Create;
+
+  repeat
+    SkipTrivia;
+
+    LToken := GetCurrentToken;
+
+    if LToken.Kind = tkBareKey then
+    begin
+      LKey.AddSegment(LToken.Text);
+      Advance;
+    end
+    else if LToken.Kind = tkString then
+    begin
+      LKey.AddSegment(ParseString(LToken.Text));
+      Advance;
+    end
+    else
+      Error('Expected key');
+
+    SkipTrivia;
+
+    if Match(tkDot) then
+    begin
+      Advance;
+      SkipTrivia;
+    end
+    else
+      Break;
+  until False;
+
+  Result := LKey;
+end;
+
+function TTomlParser.ParseValue: TTomlSyntaxNode;
+var
+  LToken: TTomlToken;
+  LValue: string;
+begin
+  SkipTrivia;
+
+  LToken := GetCurrentToken;
+
+  case LToken.Kind of
+    tkString, tkMultiLineString:
+      begin
+        LValue := ParseString(LToken.Text);
+        Result := TTomlValueSyntax.Create(LToken.Kind, LValue);
+        Advance;
+      end;
+
+    tkInteger, tkFloat, tkBoolean, tkDateTime, tkDate, tkTime:
+      begin
+        Result := TTomlValueSyntax.Create(LToken.Kind, LToken.Text);
+        Advance;
+      end;
+
+    tkLeftBracket:
+      Result := ParseArray;
+
+    tkLeftBrace:
+      Result := ParseInlineTable;
+  else
+    Error('Expected value');
+    Result := nil;  // Suppress warning
+  end;
+end;
+
+function TTomlParser.ParseArray: TTomlArraySyntax;
+var
+  LArray: TTomlArraySyntax;
+  LElement: TTomlSyntaxNode;
+begin
+  LArray := TTomlArraySyntax.Create;
+
+  Expect(tkLeftBracket);
+  SkipTrivia;
+
+  // Handle newlines in arrays
+  while Match(tkNewLine) do
+  begin
+    Advance;
+    SkipTrivia;
+  end;
+
+  while not Match(tkRightBracket) do
+  begin
+    LElement := ParseValue;
+    LArray.AddElement(LElement);
+
+    SkipTrivia;
+
+    // Handle newlines
+    while Match(tkNewLine) do
+    begin
+      Advance;
+      SkipTrivia;
+    end;
+
+    if Match(tkComma) then
+    begin
+      Advance;
+      SkipTrivia;
+
+      // Handle newlines after comma
+      while Match(tkNewLine) do
+      begin
+        Advance;
+        SkipTrivia;
+      end;
+    end
+    else if not Match(tkRightBracket) then
+      Error('Expected comma or ]');
+  end;
+
+  Expect(tkRightBracket);
+
+  Result := LArray;
+end;
+
+function TTomlParser.ParseInlineTable: TTomlInlineTableSyntax;
+var
+  LTable: TTomlInlineTableSyntax;
+  LKeyValue: TTomlKeyValueSyntax;
+begin
+  LTable := TTomlInlineTableSyntax.Create;
+
+  Expect(tkLeftBrace);
+  SkipTrivia;
+
+  while not Match(tkRightBrace) do
+  begin
+    LKeyValue := ParseKeyValue;
+    LTable.AddKeyValue(LKeyValue);
+
+    SkipTrivia;
+
+    if Match(tkComma) then
+    begin
+      Advance;
+      SkipTrivia;
+    end
+    else if not Match(tkRightBrace) then
+      Error('Expected comma or }');
+  end;
+
+  Expect(tkRightBrace);
+
+  Result := LTable;
+end;
+
+function TTomlParser.ParseKeyValue: TTomlKeyValueSyntax;
+var
+  LKey: TTomlKeySyntax;
+  LValue: TTomlSyntaxNode;
+begin
+  SkipTrivia;
+
+  LKey := ParseKey;
+
+  SkipTrivia;
+  Expect(tkEquals);
+  SkipTrivia;
+
+  LValue := ParseValue;
+
+  Result := TTomlKeyValueSyntax.Create(LKey, LValue);
+end;
+
+function TTomlParser.ParseTable: TTomlTableSyntax;
+var
+  LKey: TTomlKeySyntax;
+  LIsArrayOfTables: Boolean;
+  LTable: TTomlTableSyntax;
+  LKeyValue: TTomlKeyValueSyntax;
+begin
+  SkipTrivia;
+
+  Expect(tkLeftBracket);
+  LIsArrayOfTables := Match(tkLeftBracket);
+
+  if LIsArrayOfTables then
+    Advance;
+
+  SkipTrivia;
+
+  LKey := ParseKey;
+
+  SkipTrivia;
+
+  Expect(tkRightBracket);
+
+  if LIsArrayOfTables then
+    Expect(tkRightBracket);
+
+  SkipTrivia;
+
+  // Skip newline after table header
+  if Match(tkNewLine) then
+    Advance;
+
+  LTable := TTomlTableSyntax.Create(LKey, LIsArrayOfTables);
+
+  // Parse key-value pairs in this table
+  SkipTrivia;
+
+  while not IsEof and not Match(tkLeftBracket) do
+  begin
+    if Match(tkNewLine) then
+    begin
+      Advance;
+      SkipTrivia;
+      Continue;
+    end;
+
+    LKeyValue := ParseKeyValue;
+    LTable.AddKeyValue(LKeyValue);
+
+    SkipTrivia;
+
+    if Match(tkNewLine) then
+      Advance;
+
+    SkipTrivia;
+  end;
+
+  Result := LTable;
+end;
+
+function TTomlParser.ParseDocument: TTomlDocumentSyntax;
+var
+  LDoc: TTomlDocumentSyntax;
+  LKeyValue: TTomlKeyValueSyntax;
+  LTable: TTomlTableSyntax;
+begin
+  LDoc := TTomlDocumentSyntax.Create;
+
+  SkipTrivia;
+
+  // Parse top-level key-value pairs
+  while not IsEof and not Match(tkLeftBracket) do
+  begin
+    if Match(tkNewLine) then
+    begin
+      Advance;
+      SkipTrivia;
+      Continue;
+    end;
+
+    LKeyValue := ParseKeyValue;
+    LDoc.AddKeyValue(LKeyValue);
+
+    SkipTrivia;
+
+    if Match(tkNewLine) then
+      Advance;
+
+    SkipTrivia;
+  end;
+
+  // Parse tables
+  while not IsEof do
+  begin
+    SkipTrivia;
+
+    if Match(tkNewLine) then
+    begin
+      Advance;
+      Continue;
+    end;
+
+    if Match(tkLeftBracket) then
+    begin
+      LTable := ParseTable;
+      LDoc.AddTable(LTable);
+    end
+    else if not IsEof then
+      Error('Expected table or end of file');
+
+    SkipTrivia;
+  end;
+
+  Result := LDoc;
+end;
+
+function TTomlParser.Parse: TTomlDocumentSyntax;
+begin
+  FPosition := 0;
+  FDocument := ParseDocument;
+  Result := FDocument;
+end;
+
+{$ENDREGION}
+
+{$REGION 'DOM Implementation'}
+
+{ TTomlValue }
+
+constructor TTomlValue.CreateString(const AValue: string);
+begin
+  inherited Create;
+  FKind := tvkString;
+  FValue := AValue;
+end;
+
+constructor TTomlValue.CreateInteger(AValue: Int64);
+begin
+  inherited Create;
+  FKind := tvkInteger;
+  FValue := AValue;
+end;
+
+constructor TTomlValue.CreateFloat(AValue: Double);
+begin
+  inherited Create;
+  FKind := tvkFloat;
+  FValue := AValue;
+end;
+
+constructor TTomlValue.CreateBoolean(AValue: Boolean);
+begin
+  inherited Create;
+  FKind := tvkBoolean;
+  FValue := AValue;
+end;
+
+constructor TTomlValue.CreateDateTime(AValue: TDateTime);
+begin
+  inherited Create;
+  FKind := tvkDateTime;
+  FValue := AValue;
+end;
+
+constructor TTomlValue.CreateTable(ATable: TToml);
+begin
+  inherited Create;
+  FKind := tvkTable;
+  FTable := ATable;
+end;
+
+constructor TTomlValue.CreateArray(AArray: TTomlArray);
+begin
+  inherited Create;
+  FKind := tvkArray;
+  FArray := AArray;
+end;
+
+destructor TTomlValue.Destroy;
+begin
+  if Assigned(FTable) then
+    FTable.Free;
+  if Assigned(FArray) then
+    FArray.Free;
+  inherited;
+end;
+
+function TTomlValue.IsKind(AKind: TTomlValueKind): Boolean;
+begin
+  Result := FKind = AKind;
+end;
+
+function TTomlValue.GetAsString: string;
+begin
+  if FKind = tvkString then
+    Result := FValue.AsString
+  else
+    raise Exception.Create('Value is not a string');
+end;
+
+function TTomlValue.GetAsInteger: Int64;
+begin
+  if FKind = tvkInteger then
+    Result := FValue.AsInt64
+  else
+    raise Exception.Create('Value is not an integer');
+end;
+
+function TTomlValue.GetAsFloat: Double;
+begin
+  if FKind = tvkFloat then
+    Result := FValue.AsExtended
+  else
+    raise Exception.Create('Value is not a float');
+end;
+
+function TTomlValue.GetAsBoolean: Boolean;
+begin
+  if FKind = tvkBoolean then
+    Result := FValue.AsBoolean
+  else
+    raise Exception.Create('Value is not a boolean');
+end;
+
+function TTomlValue.GetAsDateTime: TDateTime;
+begin
+  if FKind = tvkDateTime then
+    Result := FValue.AsExtended
+  else
+    raise Exception.Create('Value is not a datetime');
+end;
+
+function TTomlValue.GetAsTable: TToml;
+begin
+  if FKind = tvkTable then
+    Result := FTable
+  else
+    raise Exception.Create('Value is not a table');
+end;
+
+function TTomlValue.GetAsArray: TTomlArray;
+begin
+  if FKind = tvkArray then
+    Result := FArray
+  else
+    raise Exception.Create('Value is not an array');
+end;
+
+{ TTomlArray }
+
+constructor TTomlArray.Create;
+begin
+  inherited Create;
+  FItems := TObjectList<TTomlValue>.Create(True);
+end;
+
+destructor TTomlArray.Destroy;
+begin
+  FItems.Free;
+  inherited;
+end;
+
+function TTomlArray.GetCount: Integer;
+begin
+  Result := FItems.Count;
+end;
+
+function TTomlArray.GetItem(AIndex: Integer): TTomlValue;
+begin
+  Result := FItems[AIndex];
+end;
+
+procedure TTomlArray.Add(AValue: TTomlValue);
+begin
+  FItems.Add(AValue);
+end;
+
+procedure TTomlArray.AddString(const AValue: string);
+begin
+  Add(TTomlValue.CreateString(AValue));
+end;
+
+procedure TTomlArray.AddInteger(AValue: Int64);
+begin
+  Add(TTomlValue.CreateInteger(AValue));
+end;
+
+procedure TTomlArray.AddFloat(AValue: Double);
+begin
+  Add(TTomlValue.CreateFloat(AValue));
+end;
+
+procedure TTomlArray.AddBoolean(AValue: Boolean);
+begin
+  Add(TTomlValue.CreateBoolean(AValue));
+end;
+
+{ TToml }
+
+constructor TToml.Create;
+begin
+  inherited Create;
+  FValues := TObjectDictionary<string, TTomlValue>.Create([doOwnsValues]);
+end;
+
+destructor TToml.Destroy;
+begin
+  FValues.Free;
+  inherited;
+end;
+
+class function TToml.InternalParse(const ASource: string): TTomlDocumentSyntax;
+var
+  LLexer: TTomlLexer;
+  LParser: TTomlParser;
+begin
+  LLexer := TTomlLexer.Create(ASource);
+  try
+    LLexer.Tokenize;
+
+    LParser := TTomlParser.Create(LLexer);
+    try
+      Result := LParser.Parse;
+    finally
+      LParser.Free;
+    end;
+  finally
+    LLexer.Free;
+  end;
+end;
+
+class function TToml.FromFile(const AFileName: string): TToml;
+var
+  LSource: string;
+begin
+  LSource := TFile.ReadAllText(AFileName, TEncoding.UTF8);
+  Result := FromString(LSource);
+end;
+
+class function TToml.FromString(const ASource: string): TToml;
+var
+  LDocument: TTomlDocumentSyntax;
+begin
+  LDocument := InternalParse(ASource);
+  try
+    Result := TTomlDomBuilder.BuildFromDocument(LDocument);
+  finally
+    LDocument.Free;
+  end;
+end;
+
+class function TToml.ParseToAST(const ASource: string): TTomlDocumentSyntax;
+begin
+  Result := InternalParse(ASource);
+end;
+
+class function TToml.Validate(const ASource: string; out AErrorMessage: string): Boolean;
+var
+  LDocument: TTomlDocumentSyntax;
+begin
+  try
+    LDocument := InternalParse(ASource);
+    try
+      Result := True;
+      AErrorMessage := '';
+    finally
+      LDocument.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      AErrorMessage := E.Message;
+    end;
+  end;
+end;
+
+procedure TToml.SaveToFile(const AFileName: string);
+var
+  LToml: string;
+begin
+  LToml := ToString;
+  TFile.WriteAllText(AFileName, LToml, TEncoding.UTF8);
+end;
+
+function TToml.ToString: string;
+var
+  LSerializer: TTomlSerializer;
+begin
+  LSerializer := TTomlSerializer.Create;
+  try
+    Result := LSerializer.Serialize(Self);
+  finally
+    LSerializer.Free;
+  end;
+end;
+
+function TToml.ContainsKey(const AKey: string): Boolean;
+begin
+  Result := FValues.ContainsKey(AKey);
+end;
+
+function TToml.TryGetValue(const AKey: string; out AValue: TTomlValue): Boolean;
+begin
+  Result := FValues.TryGetValue(AKey, AValue);
+end;
+
+function TToml.GetValue(const AKey: string): TTomlValue;
+begin
+  if not FValues.TryGetValue(AKey, Result) then
+    raise Exception.CreateFmt('Key "%s" not found', [AKey]);
+end;
+
+function TToml.GetKeys: TArray<string>;
+begin
+  Result := FValues.Keys.ToArray;
+end;
+
+procedure TToml.SetValue(const AKey: string; AValue: TTomlValue);
+begin
+  if FValues.ContainsKey(AKey) then
+    FValues.Remove(AKey);
+  FValues.Add(AKey, AValue);
+end;
+
+procedure TToml.SetString(const AKey, AValue: string);
+begin
+  SetValue(AKey, TTomlValue.CreateString(AValue));
+end;
+
+procedure TToml.SetInteger(const AKey: string; AValue: Int64);
+begin
+  SetValue(AKey, TTomlValue.CreateInteger(AValue));
+end;
+
+procedure TToml.SetFloat(const AKey: string; AValue: Double);
+begin
+  SetValue(AKey, TTomlValue.CreateFloat(AValue));
+end;
+
+procedure TToml.SetBoolean(const AKey: string; AValue: Boolean);
+begin
+  SetValue(AKey, TTomlValue.CreateBoolean(AValue));
+end;
+
+function TToml.RemoveKey(const AKey: string): Boolean;
+begin
+  Result := FValues.ContainsKey(AKey);
+  if Result then
+    FValues.Remove(AKey);
+end;
+
+procedure TToml.Clear;
+begin
+  FValues.Clear;
+end;
+
+function TToml.GetOrCreateTable(const AKey: string): TToml;
+var
+  LValue: TTomlValue;
+begin
+  if TryGetValue(AKey, LValue) then
+  begin
+    if LValue.Kind <> tvkTable then
+      raise Exception.CreateFmt('Key "%s" is not a table', [AKey]);
+    Result := LValue.AsTable;
+  end
+  else
+  begin
+    Result := TToml.Create;
+    SetValue(AKey, TTomlValue.CreateTable(Result));
+  end;
+end;
+
+function TToml.GetOrCreateArray(const AKey: string): TTomlArray;
+var
+  LValue: TTomlValue;
+begin
+  if TryGetValue(AKey, LValue) then
+  begin
+    if LValue.Kind <> tvkArray then
+      raise Exception.CreateFmt('Key "%s" is not an array', [AKey]);
+    Result := LValue.AsArray;
+  end
+  else
+  begin
+    Result := TTomlArray.Create;
+    SetValue(AKey, TTomlValue.CreateArray(Result));
+  end;
+end;
+
+{ TTomlDomBuilder }
+
+class function TTomlDomBuilder.ParseInteger(const AText: string): Int64;
+var
+  LClean: string;
+begin
+  // Remove underscores
+  LClean := AText.Replace('_', '', [rfReplaceAll]);
+
+  // Handle special bases
+  if LClean.StartsWith('0x') then
+    Result := StrToInt64('$' + LClean.Substring(2))
+  else if LClean.StartsWith('0o') then
+    Result := StrToInt64(LClean.Substring(2))  // Simplified
+  else if LClean.StartsWith('0b') then
+    Result := StrToInt64(LClean.Substring(2))  // Simplified
+  else
+    Result := StrToInt64(LClean);
+end;
+
+class function TTomlDomBuilder.ParseFloat(const AText: string): Double;
+var
+  LClean: string;
+begin
+  LClean := AText.Replace('_', '', [rfReplaceAll]);
+
+  if LClean = 'inf' then
+    Result := Infinity
+  else if LClean = '+inf' then
+    Result := Infinity
+  else if LClean = '-inf' then
+    Result := NegInfinity
+  else if LClean = 'nan' then
+    Result := NaN
+  else if LClean = '+nan' then
+    Result := NaN
+  else if LClean = '-nan' then
+    Result := NaN
+  else
+    Result := StrToFloat(LClean);
+end;
+
+class function TTomlDomBuilder.ConvertValue(ANode: TTomlSyntaxNode): TTomlValue;
+var
+  LValueNode: TTomlValueSyntax;
+  LArrayNode: TTomlArraySyntax;
+  LTableNode: TTomlInlineTableSyntax;
+begin
+  if ANode is TTomlValueSyntax then
+  begin
+    LValueNode := TTomlValueSyntax(ANode);
+
+    case LValueNode.ValueKind of
+      tkString, tkMultiLineString:
+        Result := TTomlValue.CreateString(LValueNode.Value);
+
+      tkInteger:
+        Result := TTomlValue.CreateInteger(ParseInteger(LValueNode.Value));
+
+      tkFloat:
+        Result := TTomlValue.CreateFloat(ParseFloat(LValueNode.Value));
+
+      tkBoolean:
+        Result := TTomlValue.CreateBoolean(LValueNode.Value = 'true');
+
+      tkDateTime, tkDate, tkTime:
+        Result := TTomlValue.CreateDateTime(Now);  // Simplified
+    else
+      Result := TTomlValue.CreateString(LValueNode.Value);
+    end;
+  end
+  else if ANode is TTomlArraySyntax then
+  begin
+    LArrayNode := TTomlArraySyntax(ANode);
+    Result := TTomlValue.CreateArray(ConvertArray(LArrayNode));
+  end
+  else if ANode is TTomlInlineTableSyntax then
+  begin
+    LTableNode := TTomlInlineTableSyntax(ANode);
+    Result := TTomlValue.CreateTable(ConvertInlineTable(LTableNode));
+  end
+  else
+    Result := TTomlValue.CreateString('');
+end;
+
+class function TTomlDomBuilder.ConvertArray(ANode: TTomlArraySyntax): TTomlArray;
+var
+  LArray: TTomlArray;
+  LElement: TTomlSyntaxNode;
+begin
+  LArray := TTomlArray.Create;
+
+  for LElement in ANode.Elements do
+    LArray.Add(ConvertValue(LElement));
+
+  Result := LArray;
+end;
+
+class function TTomlDomBuilder.ConvertInlineTable(ANode: TTomlInlineTableSyntax): TToml;
+var
+  LTable: TToml;
+  LKeyValue: TTomlSyntaxNode;
+begin
+  LTable := TToml.Create;
+
+  for LKeyValue in ANode.KeyValues do
+  begin
+    if LKeyValue is TTomlKeyValueSyntax then
+      ApplyKeyValue(LTable, TTomlKeyValueSyntax(LKeyValue));
+  end;
+
+  Result := LTable;
+end;
+
+class procedure TTomlDomBuilder.ApplyKeyValue(ATable: TToml; AKeyValue: TTomlKeyValueSyntax);
+var
+  LKey: string;
+  LValue: TTomlValue;
+  LCurrentTable: TToml;
+  i: Integer;
+begin
+  LCurrentTable := ATable;
+
+  // Navigate to the correct table using dotted key
+  for i := 0 to AKeyValue.Key.Segments.Count - 2 do
+  begin
+    LKey := AKeyValue.Key.Segments[i];
+    LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+  end;
+
+  // Set the final value
+  LKey := AKeyValue.Key.Segments[AKeyValue.Key.Segments.Count - 1];
+  LValue := ConvertValue(AKeyValue.Value);
+  LCurrentTable.SetValue(LKey, LValue);
+end;
+
+class function TTomlDomBuilder.BuildFromDocument(ADocument: TTomlDocumentSyntax): TToml;
+var
+  LTable: TToml;
+  LKeyValue: TTomlSyntaxNode;
+  LTableNode: TTomlSyntaxNode;
+  LTableSyntax: TTomlTableSyntax;
+  LCurrentTable: TToml;
+  LKey: string;
+  i: Integer;
+begin
+  LTable := TToml.Create;
+
+  // Process top-level key-values
+  for LKeyValue in ADocument.KeyValues do
+  begin
+    if LKeyValue is TTomlKeyValueSyntax then
+      ApplyKeyValue(LTable, TTomlKeyValueSyntax(LKeyValue));
+  end;
+
+  // Process tables
+  for LTableNode in ADocument.Tables do
+  begin
+    if LTableNode is TTomlTableSyntax then
+    begin
+      LTableSyntax := TTomlTableSyntax(LTableNode);
+      LCurrentTable := LTable;
+
+      // Navigate to the correct nested table
+      for i := 0 to LTableSyntax.Key.Segments.Count - 1 do
+      begin
+        LKey := LTableSyntax.Key.Segments[i];
+        LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+      end;
+
+      // Add key-values to this table
+      for LKeyValue in LTableSyntax.KeyValues do
+      begin
+        if LKeyValue is TTomlKeyValueSyntax then
+          ApplyKeyValue(LCurrentTable, TTomlKeyValueSyntax(LKeyValue));
+      end;
+    end;
+  end;
+
+  Result := LTable;
+end;
+
+{ TTomlSerializer }
+
+constructor TTomlSerializer.Create;
+begin
+  inherited Create;
+  FBuilder := TStringBuilder.Create;
+end;
+
+destructor TTomlSerializer.Destroy;
+begin
+  FBuilder.Free;
+  inherited;
+end;
+
+function TTomlSerializer.EscapeString(const AValue: string): string;
+var
+  i: Integer;
+  LChar: Char;
+begin
+  Result := '';
+  for i := 1 to Length(AValue) do
+  begin
+    LChar := AValue[i];
+    case LChar of
+      '\': Result := Result + '\\';
+      '"': Result := Result + '\"';
+      #8: Result := Result + '\b';
+      #9: Result := Result + '\t';
+      #10: Result := Result + '\n';
+      #12: Result := Result + '\f';
+      #13: Result := Result + '\r';
+    else
+      Result := Result + LChar;
+    end;
+  end;
+end;
+
+function TTomlSerializer.NeedsQuotes(const AKey: string): Boolean;
+var
+  i: Integer;
+  LChar: Char;
+begin
+  if AKey = '' then
+    Exit(True);
+
+  for i := 1 to Length(AKey) do
+  begin
+    LChar := AKey[i];
+    if not (LChar.IsLetterOrDigit or (LChar = '_') or (LChar = '-')) then
+      Exit(True);
+  end;
+
+  Result := False;
+end;
+
+function TTomlSerializer.QuoteKey(const AKey: string): string;
+begin
+  if NeedsQuotes(AKey) then
+    Result := '"' + EscapeString(AKey) + '"'
+  else
+    Result := AKey;
+end;
+
+procedure TTomlSerializer.WriteValue(AValue: TTomlValue);
+begin
+  case AValue.Kind of
+    tvkString:
+      FBuilder.Append('"').Append(EscapeString(AValue.AsString)).Append('"');
+
+    tvkInteger:
+      FBuilder.Append(AValue.AsInteger);
+
+    tvkFloat:
+      FBuilder.Append(FloatToStr(AValue.AsFloat));
+
+    tvkBoolean:
+      if AValue.AsBoolean then
+        FBuilder.Append('true')
+      else
+        FBuilder.Append('false');
+
+    tvkDateTime:
+      FBuilder.Append(DateTimeToStr(AValue.AsDateTime));  // Simplified
+
+    tvkArray:
+      WriteArray(AValue.AsArray);
+
+    tvkTable:
+      WriteInlineTable(AValue.AsTable);
+  end;
+end;
+
+procedure TTomlSerializer.WriteArray(AArray: TTomlArray);
+var
+  i: Integer;
+begin
+  FBuilder.Append('[');
+
+  for i := 0 to AArray.Count - 1 do
+  begin
+    if i > 0 then
+      FBuilder.Append(', ');
+    WriteValue(AArray[i]);
+  end;
+
+  FBuilder.Append(']');
+end;
+
+procedure TTomlSerializer.WriteInlineTable(ATable: TToml);
+var
+  LKeys: TArray<string>;
+  i: Integer;
+begin
+  FBuilder.Append('{ ');
+
+  LKeys := ATable.Keys;
+  for i := 0 to Length(LKeys) - 1 do
+  begin
+    if i > 0 then
+      FBuilder.Append(', ');
+
+    FBuilder.Append(QuoteKey(LKeys[i])).Append(' = ');
+    WriteValue(ATable[LKeys[i]]);
+  end;
+
+  FBuilder.Append(' }');
+end;
+
+procedure TTomlSerializer.WriteKeyValue(const AKey: string; AValue: TTomlValue);
+begin
+  FBuilder.Append(QuoteKey(AKey)).Append(' = ');
+  WriteValue(AValue);
+  FBuilder.AppendLine;
+end;
+
+procedure TTomlSerializer.WriteTable(const APath: string; ATable: TToml);
+var
+  LKeys: TArray<string>;
+  LKey: string;
+  LValue: TTomlValue;
+  LFullPath: string;
+begin
+  // Write simple key-values first
+  LKeys := ATable.Keys;
+  for LKey in LKeys do
+  begin
+    LValue := ATable[LKey];
+    if not (LValue.Kind in [tvkTable]) then
+      WriteKeyValue(LKey, LValue);
+  end;
+
+  // Write nested tables
+  for LKey in LKeys do
+  begin
+    LValue := ATable[LKey];
+    if LValue.Kind = tvkTable then
+    begin
+      if APath <> '' then
+        LFullPath := APath + '.' + LKey
+      else
+        LFullPath := LKey;
+
+      FBuilder.AppendLine;
+      FBuilder.Append('[').Append(LFullPath).Append(']').AppendLine;
+      WriteTable(LFullPath, LValue.AsTable);
+    end;
+  end;
+end;
+
+function TTomlSerializer.Serialize(ATable: TToml): string;
+begin
+  FBuilder.Clear;
+  WriteTable('', ATable);
+  Result := FBuilder.ToString;
+end;
+
+{$ENDREGION}
 
 end.
