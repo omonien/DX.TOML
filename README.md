@@ -54,6 +54,38 @@ DX.TOML follows a clean three-layer design inspired by [Tomlyn](https://github.c
 
 ## Quick Start
 
+### Parse TOML from String
+
+```delphi
+uses
+  System.SysUtils,
+  DX.TOML;
+
+var
+  LToml: TTomlTable;
+  LTomlStr: string;
+begin
+  // Build TOML string
+  LTomlStr := 'title = "TOML Example"' + sLineBreak +
+              sLineBreak +
+              '[owner]' + sLineBreak +
+              'name = "John Doe"' + sLineBreak +
+              'age = 42';
+
+  // Parse to runtime model
+  LToml := TToml.ToModel(LTomlStr);
+  try
+    ShowMessage(LToml['title'].AsString);  // "TOML Example"
+    ShowMessage(LToml['owner'].AsTable['name'].AsString);  // "John Doe"
+    ShowMessage(LToml['owner'].AsTable['age'].AsInteger.ToString);  // "42"
+  finally
+    LToml.Free;
+  end;
+end;
+```
+
+### Parse TOML from File
+
 ```delphi
 uses
   DX.TOML;
@@ -61,19 +93,44 @@ uses
 var
   LToml: TTomlTable;
 begin
-  // Parse TOML string to runtime model
-  LToml := TToml.ToModel('
-    title = "TOML Example"
-
-    [owner]
-    name = "John Doe"
-    age = 42
-  ');
+  LToml := TToml.ToModelFromFile('config.toml');
   try
-    ShowMessage(LToml['title'].AsString);
-    ShowMessage(LToml.Table['owner']['name'].AsString);
+    if LToml.ContainsKey('database') then
+    begin
+      var LDb := LToml['database'].AsTable;
+      var LServer := LDb['server'].AsString;
+      var LPort := LDb['port'].AsInteger;
+      // Use configuration...
+    end;
   finally
     LToml.Free;
+  end;
+end;
+```
+
+### Serialize to TOML
+
+```delphi
+uses
+  DX.TOML;
+
+var
+  LTable: TTomlTable;
+  LTomlStr: string;
+begin
+  LTable := TTomlTable.Create;
+  try
+    LTable.SetString('title', 'My Application');
+    LTable.SetInteger('version', 1);
+
+    var LDb := LTable.GetOrCreateTable('database');
+    LDb.SetString('server', 'localhost');
+    LDb.SetInteger('port', 5432);
+
+    LTomlStr := TToml.FromModel(LTable);
+    // Save or use TOML string...
+  finally
+    LTable.Free;
   end;
 end;
 ```
