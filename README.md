@@ -213,13 +213,15 @@ end;
 ```
 DX.TOML/
 ├── Docs/
-│   └── Delphi Style Guide EN.md
+│   ├── Delphi Style Guide EN.md
+│   └── TEST_COVERAGE.md         # Test coverage analysis
 ├── Source/
 │   ├── DX.TOML.pas              # Single-unit library (~2,500 lines)
 │   └── DX.TOML.Adapter.INI.pas  # Optional INI adapter
 ├── Tests/
 │   ├── DUnitX/                  # DUnitX framework (submodule)
 │   ├── GoldenFiles/             # Reference TOML files
+│   ├── toml-test-adapter/       # Official toml-test adapter
 │   └── DX.TOML.Tests.dpr        # Test project
 └── Samples/
     └── SimpleParser/            # Example usage
@@ -239,12 +241,37 @@ Configuration:
 
 ## Testing
 
+### DUnitX Test Suite
+
 The test suite uses DUnitX with golden files for comprehensive validation:
 
 ```bash
 git submodule update --init --recursive
 # Open Tests/DX.TOML.Tests.dproj and run
 ```
+
+Test coverage includes:
+- **Lexer tests** - Tokenization and position tracking
+- **Parser tests** - AST construction and syntax validation
+- **API tests** - DOM manipulation and round-trip preservation
+- **DateTime tests** - RFC 3339 datetime parsing
+- **Negative tests** - Invalid TOML rejection
+- **Golden files** - Reference TOML documents
+
+### toml-test Integration
+
+DX.TOML includes an adapter for the official [toml-test](https://github.com/BurntSushi/toml-test) suite (278 decoder tests):
+
+```bash
+# Build adapter
+cd Tests/toml-test-adapter
+dcc32 -B DX.TOML.TestAdapter.dpr
+
+# Run toml-test
+toml-test path/to/DX.TOML.TestAdapter.exe
+```
+
+See [Tests/toml-test-adapter/README.md](Tests/toml-test-adapter/README.md) for details.
 
 ## License
 
