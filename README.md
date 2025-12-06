@@ -157,8 +157,10 @@ DX.TOML/
 ## Building
 
 Requirements:
-- Delphi 12.0 Athens or later (for multiline strings, inline variables, RTTI)
+- Delphi 11.0 Alexandria or later (for inline variables, RTTI)
 - DUnitX (included as submodule)
+
+Note: The examples in this README use Delphi 12+ multiline strings (`'''`) for readability, but the library itself is compatible with Delphi 11.0+.
 
 Configuration:
 - Output path: `$(platform)/$(config)` (e.g., `win32\debug`)
