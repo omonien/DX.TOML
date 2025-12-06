@@ -97,6 +97,40 @@ type
     procedure TestLocalTime;
   end;
 
+  [TestFixture]
+  TTomlNegativeTests = class
+  public
+    [Test]
+    procedure TestInvalidKeyValue;
+
+    [Test]
+    procedure TestDuplicateKeys;
+
+    [Test]
+    procedure TestInvalidEscapeSequence;
+
+    [Test]
+    procedure TestMalformedTable;
+
+    [Test]
+    procedure TestInvalidArrayMixedTypes;
+
+    [Test]
+    procedure TestInvalidDateTime;
+
+    [Test]
+    procedure TestUnclosedString;
+
+    [Test]
+    procedure TestInvalidNumber;
+
+    [Test]
+    procedure TestRedefineTable;
+
+    [Test]
+    procedure TestInvalidInlineTable;
+  end;
+
 implementation
 
 { TTomlLexerTests }
@@ -476,6 +510,144 @@ begin
   finally
     LTable.Free;
   end;
+end;
+
+{ TTomlNegativeTests }
+
+procedure TTomlNegativeTests.TestInvalidKeyValue;
+var
+  LError: string;
+begin
+  // Missing value
+  Assert.IsFalse(TToml.Validate('key =', LError), 'Should reject key without value');
+
+  // Missing equals
+  Assert.IsFalse(TToml.Validate('key "value"', LError), 'Should reject key without equals');
+
+  // Invalid key syntax
+  Assert.IsFalse(TToml.Validate('= "value"', LError), 'Should reject value without key');
+end;
+
+procedure TTomlNegativeTests.TestDuplicateKeys;
+var
+  LToml: string;
+  LError: string;
+begin
+  LToml := 'name = "First"' + sLineBreak + 'name = "Second"';
+
+  Assert.IsFalse(TToml.Validate(LToml, LError), 'Should reject duplicate keys');
+end;
+
+procedure TTomlNegativeTests.TestInvalidEscapeSequence;
+var
+  LError: string;
+begin
+  // Invalid escape character
+  Assert.IsFalse(TToml.Validate('text = "invalid \x escape"', LError),
+    'Should reject invalid escape sequence');
+end;
+
+procedure TTomlNegativeTests.TestMalformedTable;
+var
+  LError: string;
+begin
+  // Missing closing bracket
+  Assert.IsFalse(TToml.Validate('[table', LError), 'Should reject unclosed table header');
+
+  // Missing opening bracket
+  Assert.IsFalse(TToml.Validate('table]', LError), 'Should reject table without opening bracket');
+
+  // Empty table name
+  Assert.IsFalse(TToml.Validate('[]', LError), 'Should reject empty table name');
+end;
+
+procedure TTomlNegativeTests.TestInvalidArrayMixedTypes;
+var
+  LError: string;
+begin
+  // Mixed types in array (string and integer)
+  Assert.IsFalse(TToml.Validate('mixed = ["string", 123]', LError),
+    'Should reject mixed type arrays');
+
+  // Mixed types in array (array of integers and array of strings)
+  Assert.IsFalse(TToml.Validate('mixed = [[1, 2], ["a", "b"]]', LError),
+    'Should reject arrays with mixed element types');
+end;
+
+procedure TTomlNegativeTests.TestInvalidDateTime;
+var
+  LError: string;
+begin
+  // Invalid month
+  Assert.IsFalse(TToml.Validate('date = 1979-13-27', LError), 'Should reject invalid month');
+
+  // Invalid day
+  Assert.IsFalse(TToml.Validate('date = 1979-05-32', LError), 'Should reject invalid day');
+
+  // Invalid hour
+  Assert.IsFalse(TToml.Validate('time = 25:00:00', LError), 'Should reject invalid hour');
+
+  // Malformed datetime
+  Assert.IsFalse(TToml.Validate('dt = 1979-05-27T', LError),
+    'Should reject malformed datetime');
+end;
+
+procedure TTomlNegativeTests.TestUnclosedString;
+var
+  LError: string;
+begin
+  // Unclosed basic string
+  Assert.IsFalse(TToml.Validate('text = "unclosed', LError),
+    'Should reject unclosed string');
+
+  // Unclosed literal string
+  Assert.IsFalse(TToml.Validate('text = ''unclosed', LError),
+    'Should reject unclosed literal string');
+end;
+
+procedure TTomlNegativeTests.TestInvalidNumber;
+var
+  LError: string;
+begin
+  // Leading zeros (not allowed in TOML)
+  Assert.IsFalse(TToml.Validate('num = 007', LError), 'Should reject leading zeros');
+
+  // Invalid float format
+  Assert.IsFalse(TToml.Validate('num = 1.2.3', LError), 'Should reject multiple decimal points');
+
+  // Invalid hex format
+  Assert.IsFalse(TToml.Validate('num = 0xGHI', LError), 'Should reject invalid hex digits');
+end;
+
+procedure TTomlNegativeTests.TestRedefineTable;
+var
+  LToml: string;
+  LError: string;
+begin
+  // Redefining same table
+  LToml := '[table]' + sLineBreak +
+           'key = "value"' + sLineBreak +
+           '[table]' + sLineBreak +
+           'key2 = "value2"';
+
+  Assert.IsFalse(TToml.Validate(LToml, LError), 'Should reject redefined table');
+end;
+
+procedure TTomlNegativeTests.TestInvalidInlineTable;
+var
+  LError: string;
+begin
+  // Missing closing brace
+  Assert.IsFalse(TToml.Validate('point = { x = 1, y = 2', LError),
+    'Should reject unclosed inline table');
+
+  // Missing key
+  Assert.IsFalse(TToml.Validate('point = { = 1 }', LError),
+    'Should reject inline table with missing key');
+
+  // Newline in inline table (not allowed)
+  Assert.IsFalse(TToml.Validate('point = { x = 1,' + sLineBreak + 'y = 2 }', LError),
+    'Should reject inline table with newline');
 end;
 
 end.
