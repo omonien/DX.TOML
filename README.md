@@ -1,6 +1,52 @@
-# DX.TOML
+# DX.TOML [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Delphi](https://img.shields.io/badge/Delphi-11.0%2B-blue) ![TOML](https://img.shields.io/badge/TOML-v1.0.0-orange)
 
 A modern, spec-compliant TOML parser for Delphi with round-trip capability.
+
+## What is TOML?
+
+**TOML** (Tom's Obvious, Minimal Language) is a modern configuration file format designed to be easy to read and write for humans while remaining unambiguous for machines.
+
+### Why TOML instead of INI?
+
+If you're familiar with Delphi's `TIniFile`, think of TOML as "INI done right":
+
+- **Strongly typed**: Native support for strings, integers, floats, booleans, dates, arrays, and nested tables
+- **Standardized**: TOML v1.0.0 is a formal specification, unlike INI which has many incompatible variants
+- **Unambiguous**: No guessing about data types or escaping rules
+- **Modern**: Supports Unicode, multiline strings, comments, and complex nested structures
+- **Human-friendly**: Readable syntax with clear semantics
+
+**Example comparison:**
+
+```ini
+; Traditional INI - everything is a string
+[Database]
+Server=localhost
+Port=5432
+Enabled=true
+Tags=web,api,prod
+```
+
+```toml
+# TOML - proper types and structures
+[database]
+server = "localhost"
+port = 5432
+enabled = true
+tags = ["web", "api", "prod"]
+
+[database.connection]
+timeout = 30
+retry = true
+```
+
+### TOML Specification
+
+- Official website: [toml.io](https://toml.io/en/)
+- Current specification: [TOML v1.0.0](https://toml.io/en/v1.0.0)
+- GitHub: [toml-lang/toml](https://github.com/toml-lang/toml)
+
+DX.TOML implements the complete TOML v1.0.0 specification.
 
 ## Features
 
