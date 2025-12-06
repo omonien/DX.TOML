@@ -95,6 +95,9 @@ type
     /// <summary>Read all keys in a section</summary>
     procedure ReadSection(const ASection: string; AStrings: TStrings);
 
+    /// <summary>Read all key=value pairs in a section</summary>
+    procedure ReadSectionValues(const ASection: string; AStrings: TStrings);
+
     /// <summary>Delete a key from a section</summary>
     procedure DeleteKey(const ASection, AKey: string);
 
@@ -354,31 +357,60 @@ begin
   end;
 end;
 
+procedure TTomlIniFile.ReadSectionValues(const ASection: string; AStrings: TStrings);
+var
+  LSection: TToml;
+  LKeys: TArray<string>;
+  LKey: string;
+  LValue: TTomlValue;
+begin
+  AStrings.Clear;
+
+  if FTable.ContainsKey(ASection) then
+  begin
+    LSection := FTable[ASection].AsTable;
+    LKeys := LSection.Keys;
+
+    for LKey in LKeys do
+    begin
+      if LSection.TryGetValue(LKey, LValue) then
+      begin
+        case LValue.Kind of
+          tvkString:
+            AStrings.Add(LKey + '=' + LValue.AsString);
+          tvkInteger:
+            AStrings.Add(LKey + '=' + LValue.AsInteger.ToString);
+          tvkFloat:
+            AStrings.Add(LKey + '=' + FloatToStr(LValue.AsFloat));
+          tvkBoolean:
+            if LValue.AsBoolean then
+              AStrings.Add(LKey + '=true')
+            else
+              AStrings.Add(LKey + '=false');
+        else
+          AStrings.Add(LKey + '=' + LValue.AsString);
+        end;
+      end;
+    end;
+  end;
+end;
+
 procedure TTomlIniFile.DeleteKey(const ASection, AKey: string);
 var
   LSection: TToml;
-  LValue: TTomlValue;
 begin
   if FTable.ContainsKey(ASection) then
   begin
     LSection := FTable[ASection].AsTable;
-    if LSection.TryGetValue(AKey, LValue) then
-    begin
-      // Note: TObjectDictionary doesn't expose Remove, we need to work around this
-      // For now, set to empty string as a workaround
-      LSection.SetString(AKey, '');
+    if LSection.RemoveKey(AKey) then
       FModified := True;
-    end;
   end;
 end;
 
 procedure TTomlIniFile.EraseSection(const ASection: string);
 begin
-  if FTable.ContainsKey(ASection) then
-  begin
-    // Similar workaround needed here
+  if FTable.RemoveKey(ASection) then
     FModified := True;
-  end;
 end;
 
 procedure TTomlIniFile.UpdateFile;

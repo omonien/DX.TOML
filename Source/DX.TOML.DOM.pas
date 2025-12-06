@@ -172,6 +172,13 @@ type
     /// <summary>Set a boolean value</summary>
     procedure SetBoolean(const AKey: string; AValue: Boolean);
 
+    /// <summary>Remove a key from the table</summary>
+    /// <returns>True if key was removed, False if key didn't exist</returns>
+    function RemoveKey(const AKey: string): Boolean;
+
+    /// <summary>Clear all keys from the table</summary>
+    procedure Clear;
+
     /// <summary>Get or create a nested table</summary>
     function GetOrCreateTable(const AKey: string): TToml;
 
@@ -533,6 +540,18 @@ end;
 procedure TToml.SetBoolean(const AKey: string; AValue: Boolean);
 begin
   SetValue(AKey, TTomlValue.CreateBoolean(AValue));
+end;
+
+function TToml.RemoveKey(const AKey: string): Boolean;
+begin
+  Result := FValues.ContainsKey(AKey);
+  if Result then
+    FValues.Remove(AKey);
+end;
+
+procedure TToml.Clear;
+begin
+  FValues.Clear;
 end;
 
 function TToml.GetOrCreateTable(const AKey: string): TToml;
