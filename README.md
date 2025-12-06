@@ -132,6 +132,44 @@ begin
 end;
 ```
 
+### INI File Compatibility (Adapter)
+
+DX.TOML includes an optional INI adapter that treats INI files as a subset of TOML:
+
+```delphi
+uses
+  DX.TOML.Adapter.INI;
+
+var
+  LIni: TTomlIniFile;
+begin
+  LIni := TTomlIniFile.Create('config.ini');
+  try
+    // Read values (INI-style API)
+    var LServer := LIni.ReadString('Database', 'Server', 'localhost');
+    var LPort := LIni.ReadInteger('Database', 'Port', 5432);
+    var LEnabled := LIni.ReadBool('Database', 'Enabled', True);
+
+    // Write values
+    LIni.WriteString('Database', 'Server', '192.168.1.100');
+    LIni.WriteInteger('Database', 'Port', 3306);
+
+    // Save changes
+    LIni.UpdateFile;
+  finally
+    LIni.Free;
+  end;
+end;
+```
+
+**Benefits:**
+- Drop-in replacement for `TIniFile` with TOML backend
+- Supports types beyond strings (integers, floats, booleans)
+- Preserves comments and formatting
+- Full TOML syntax support in INI files
+
+**Design principle:** INI is an adapter use case, not part of the core architecture.
+
 ## Project Structure
 
 ```
