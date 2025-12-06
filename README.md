@@ -25,17 +25,18 @@ DX.TOML follows a clean three-layer design inspired by [Tomlyn](https://github.c
 ### 2. DOM Layer (Runtime Model)
 **Purpose**: Convenient runtime access to TOML data
 
-- `DX.TOML.DOM.pas` - `TTomlTable`, `TTomlArray` classes
+- `DX.TOML.DOM.pas` - `TToml`, `TTomlArray`, `TTomlValue` classes
 - Dictionary/List-based for intuitive navigation
 - Type-safe value access with Delphi RTTI
+- Integrated load/save methods
 
 ### 3. API Layer (Public Interface)
-**Purpose**: Simple, high-level methods for common tasks
+**Purpose**: Simple, unified interface
 
-- `DX.TOML.pas` - Main `TToml` class
-- `Parse()` → AST (TTomlDocumentSyntax)
-- `ToModel()` → DOM (TTomlTable)
-- `FromModel()` → TOML string
+- `DX.TOML.pas` - Re-exports types from DOM layer
+- `TToml.FromFile()` / `TToml.FromString()` → Load TOML
+- `TToml.SaveToFile()` / `TToml.ToString()` → Save TOML
+- `TToml.ParseToAST()` → AST for advanced scenarios
 
 ### Supporting Components
 
@@ -61,10 +62,10 @@ uses
   DX.TOML;
 
 var
-  LToml: TTomlTable;
+  LToml: TToml;
 begin
-  // Parse TOML string to runtime model (using Delphi 12+ multiline strings)
-  LToml := TToml.ToModel('''
+  // Parse TOML string (using Delphi 12+ multiline strings)
+  LToml := TToml.FromString('''
     title = "TOML Example"
 
     [owner]
@@ -88,9 +89,9 @@ uses
   DX.TOML;
 
 var
-  LToml: TTomlTable;
+  LToml: TToml;
 begin
-  LToml := TToml.ToModelFromFile('config.toml');
+  LToml := TToml.FromFile('config.toml');
   try
     if LToml.ContainsKey('database') then
     begin
@@ -105,29 +106,28 @@ begin
 end;
 ```
 
-### Serialize to TOML
+### Create and Save TOML
 
 ```delphi
 uses
   DX.TOML;
 
 var
-  LTable: TTomlTable;
-  LTomlStr: string;
+  LToml: TToml;
 begin
-  LTable := TTomlTable.Create;
+  LToml := TToml.Create;
   try
-    LTable.SetString('title', 'My Application');
-    LTable.SetInteger('version', 1);
+    LToml.SetString('title', 'My Application');
+    LToml.SetInteger('version', 1);
 
-    var LDb := LTable.GetOrCreateTable('database');
+    var LDb := LToml.GetOrCreateTable('database');
     LDb.SetString('server', 'localhost');
     LDb.SetInteger('port', 5432);
 
-    LTomlStr := TToml.FromModel(LTable);
-    // Save or use TOML string...
+    LToml.SaveToFile('config.toml');
+    // or: var LTomlStr := LToml.ToString;
   finally
-    LTable.Free;
+    LToml.Free;
   end;
 end;
 ```

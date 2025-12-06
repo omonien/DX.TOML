@@ -47,12 +47,12 @@ type
   TTomlIniFile = class
   private
     FFileName: string;
-    FTable: TTomlTable;
+    FTable: TToml;
     FModified: Boolean;
 
     procedure LoadFromFile;
     procedure SaveToFile;
-    function GetSection(const ASection: string): TTomlTable;
+    function GetSection(const ASection: string): TToml;
     function ConvertIniToToml(const AIniContent: string): string;
     function ConvertTomlToIni(const ATomlContent: string): string;
   public
@@ -117,7 +117,7 @@ begin
   inherited Create;
   FFileName := AFileName;
   FModified := False;
-  FTable := TTomlTable.Create;
+  FTable := TToml.Create;
 
   if TFile.Exists(FFileName) then
     LoadFromFile;
@@ -173,11 +173,11 @@ begin
 
   try
     FTable.Free;
-    FTable := TToml.ToModel(LTomlContent);
+    FTable := TToml.FromString(LTomlContent);
   except
     // If parsing fails, create empty table
     FTable.Free;
-    FTable := TTomlTable.Create;
+    FTable := TToml.Create;
   end;
 
   FModified := False;
@@ -188,18 +188,18 @@ var
   LToml: string;
   LIni: string;
 begin
-  LToml := TToml.FromModel(FTable);
+  LToml := FTable.ToString;
   LIni := ConvertTomlToIni(LToml);
 
   TFile.WriteAllText(FFileName, LIni, TEncoding.UTF8);
   FModified := False;
 end;
 
-function TTomlIniFile.GetSection(const ASection: string): TTomlTable;
+function TTomlIniFile.GetSection(const ASection: string): TToml;
 begin
   if not FTable.ContainsKey(ASection) then
   begin
-    Result := TTomlTable.Create;
+    Result := TToml.Create;
     FTable.SetValue(ASection, TTomlValue.CreateTable(Result));
   end
   else
@@ -212,7 +212,7 @@ end;
 
 function TTomlIniFile.ReadString(const ASection, AKey, ADefault: string): string;
 var
-  LSection: TTomlTable;
+  LSection: TToml;
   LValue: TTomlValue;
 begin
   if FTable.ContainsKey(ASection) then
@@ -227,7 +227,7 @@ end;
 
 procedure TTomlIniFile.WriteString(const ASection, AKey, AValue: string);
 var
-  LSection: TTomlTable;
+  LSection: TToml;
 begin
   LSection := GetSection(ASection);
   LSection.SetString(AKey, AValue);
@@ -236,7 +236,7 @@ end;
 
 function TTomlIniFile.ReadInteger(const ASection, AKey: string; ADefault: Integer): Integer;
 var
-  LSection: TTomlTable;
+  LSection: TToml;
   LValue: TTomlValue;
 begin
   if FTable.ContainsKey(ASection) then
@@ -251,7 +251,7 @@ end;
 
 procedure TTomlIniFile.WriteInteger(const ASection, AKey: string; AValue: Integer);
 var
-  LSection: TTomlTable;
+  LSection: TToml;
 begin
   LSection := GetSection(ASection);
   LSection.SetInteger(AKey, AValue);
@@ -260,7 +260,7 @@ end;
 
 function TTomlIniFile.ReadBool(const ASection, AKey: string; ADefault: Boolean): Boolean;
 var
-  LSection: TTomlTable;
+  LSection: TToml;
   LValue: TTomlValue;
 begin
   if FTable.ContainsKey(ASection) then
@@ -275,7 +275,7 @@ end;
 
 procedure TTomlIniFile.WriteBool(const ASection, AKey: string; AValue: Boolean);
 var
-  LSection: TTomlTable;
+  LSection: TToml;
 begin
   LSection := GetSection(ASection);
   LSection.SetBoolean(AKey, AValue);
@@ -284,7 +284,7 @@ end;
 
 function TTomlIniFile.ReadFloat(const ASection, AKey: string; ADefault: Double): Double;
 var
-  LSection: TTomlTable;
+  LSection: TToml;
   LValue: TTomlValue;
 begin
   if FTable.ContainsKey(ASection) then
@@ -299,7 +299,7 @@ end;
 
 procedure TTomlIniFile.WriteFloat(const ASection, AKey: string; AValue: Double);
 var
-  LSection: TTomlTable;
+  LSection: TToml;
 begin
   LSection := GetSection(ASection);
   LSection.SetFloat(AKey, AValue);
@@ -313,7 +313,7 @@ end;
 
 function TTomlIniFile.ValueExists(const ASection, AKey: string): Boolean;
 var
-  LSection: TTomlTable;
+  LSection: TToml;
   LValue: TTomlValue;
 begin
   Result := False;
@@ -341,7 +341,7 @@ end;
 
 procedure TTomlIniFile.ReadSection(const ASection: string; AStrings: TStrings);
 var
-  LSection: TTomlTable;
+  LSection: TToml;
   LKeys: TArray<string>;
 begin
   AStrings.Clear;
@@ -356,7 +356,7 @@ end;
 
 procedure TTomlIniFile.DeleteKey(const ASection, AKey: string);
 var
-  LSection: TTomlTable;
+  LSection: TToml;
   LValue: TTomlValue;
 begin
   if FTable.ContainsKey(ASection) then

@@ -208,11 +208,11 @@ end;
 procedure TTomlParserTests.TestNestedTables;
 var
   LToml: string;
-  LTable: TTomlTable;
+  LTable: TToml;
 begin
   LToml := '[database.server]' + sLineBreak + 'port = 5432';
 
-  LTable := TToml.ToModel(LToml);
+  LTable := TToml.FromString(LToml);
   try
     Assert.IsTrue(LTable.ContainsKey('database'), 'Should have database table');
   finally
@@ -223,11 +223,11 @@ end;
 procedure TTomlParserTests.TestArray;
 var
   LToml: string;
-  LTable: TTomlTable;
+  LTable: TToml;
 begin
   LToml := 'numbers = [1, 2, 3]';
 
-  LTable := TToml.ToModel(LToml);
+  LTable := TToml.FromString(LToml);
   try
     Assert.IsTrue(LTable.ContainsKey('numbers'), 'Should have numbers array');
     Assert.AreEqual(Ord(tvkArray), Ord(LTable['numbers'].Kind), 'Should be an array');
@@ -239,11 +239,11 @@ end;
 procedure TTomlParserTests.TestInlineTable;
 var
   LToml: string;
-  LTable: TTomlTable;
+  LTable: TToml;
 begin
   LToml := 'point = { x = 1, y = 2 }';
 
-  LTable := TToml.ToModel(LToml);
+  LTable := TToml.FromString(LToml);
   try
     Assert.IsTrue(LTable.ContainsKey('point'), 'Should have point table');
     Assert.AreEqual(Ord(tvkTable), Ord(LTable['point'].Kind), 'Should be a table');
@@ -257,12 +257,12 @@ end;
 procedure TTomlApiTests.TestToModel;
 var
   LToml: string;
-  LTable: TTomlTable;
+  LTable: TToml;
 begin
   LToml := 'title = "TOML Example"' + sLineBreak +
            'version = 1';
 
-  LTable := TToml.ToModel(LToml);
+  LTable := TToml.FromString(LToml);
   try
     Assert.IsNotNull(LTable, 'Table should not be nil');
     Assert.IsTrue(LTable.ContainsKey('title'), 'Should have title key');
@@ -274,15 +274,15 @@ end;
 
 procedure TTomlApiTests.TestFromModel;
 var
-  LTable: TTomlTable;
+  LTable: TToml;
   LToml: string;
 begin
-  LTable := TTomlTable.Create;
+  LTable := TToml.Create;
   try
     LTable.SetString('title', 'Test');
     LTable.SetInteger('version', 1);
 
-    LToml := TToml.FromModel(LTable);
+    LToml := LTable.ToString;
 
     Assert.IsTrue(LToml.Contains('title'), 'Should contain title');
     Assert.IsTrue(LToml.Contains('version'), 'Should contain version');
@@ -294,17 +294,17 @@ end;
 procedure TTomlApiTests.TestRoundTrip;
 var
   LOriginal: string;
-  LTable: TTomlTable;
+  LTable: TToml;
   LSerialized: string;
-  LTable2: TTomlTable;
+  LTable2: TToml;
 begin
   LOriginal := 'title = "TOML"' + sLineBreak + 'count = 42';
 
-  LTable := TToml.ToModel(LOriginal);
+  LTable := TToml.FromString(LOriginal);
   try
-    LSerialized := TToml.FromModel(LTable);
+    LSerialized := LTable.ToString;
 
-    LTable2 := TToml.ToModel(LSerialized);
+    LTable2 := TToml.FromString(LSerialized);
     try
       Assert.AreEqual('TOML', LTable2['title'].AsString, 'Title should survive round-trip');
       Assert.AreEqual(Int64(42), LTable2['count'].AsInteger, 'Count should survive round-trip');
@@ -337,14 +337,14 @@ procedure TTomlGoldenFileTests.TestExample01;
 var
   LFilePath: string;
   LToml: string;
-  LTable: TTomlTable;
+  LTable: TToml;
 begin
   LFilePath := TPath.Combine(GetGoldenFilesPath, 'example01.toml');
 
   if TFile.Exists(LFilePath) then
   begin
     LToml := TFile.ReadAllText(LFilePath);
-    LTable := TToml.ToModel(LToml);
+    LTable := TToml.FromString(LToml);
     try
       Assert.IsNotNull(LTable, 'Table should not be nil');
     finally
