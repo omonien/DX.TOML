@@ -1,0 +1,55 @@
+# Escape Sequences in TOML Strings
+
+# Basic escape sequences
+tab = "Column1\tColumn2\tColumn3"
+newline = "Line 1\nLine 2\nLine 3"
+carriage_return = "First\rSecond"
+backslash = "Path: C:\\Users\\Documents"
+quote = "She said \"Hello!\""
+backspace = "Text\bwith\bbackspace"
+form_feed = "Page1\fPage2"
+
+# Unicode escapes (4-digit)
+unicode_4digit = "Unicode: \u00A9 \u00AE \u2122"
+unicode_symbols = "Arrows: \u2190 \u2191 \u2192 \u2193"
+unicode_emoji_4 = "\u2764 \u2600 \u2601"
+
+# Unicode escapes (8-digit)
+unicode_8digit = "Emoji: \U0001F600 \U0001F602 \U0001F923"
+unicode_flags = "Flags: \U0001F1FA\U0001F1F8 \U0001F1EC\U0001F1E7"
+
+# Multiple escapes in one string
+multiple = "Tab:\t Newline:\n Quote:\" Backslash:\\"
+
+# Escaped characters in paths
+windows_path = "C:\\Program Files\\MyApp\\config.toml"
+unix_path = "/home/user/documents/file.txt"  # No escapes needed
+network_path = "\\\\server\\share\\folder"
+
+# Escapes in multiline strings
+multiline_escaped = """
+First line with \"quotes\"
+Second line with \\backslash
+Third line with \ttab"""
+
+# Literal strings don't escape (single quotes)
+literal_no_escape = 'C:\Users\Path\No\Escape\Needed'
+literal_backslash = 'Backslash \ is literal'
+literal_quotes = 'She said "Hello" without escapes'
+
+# Multiline literal (no escaping)
+multiline_literal = '''
+C:\Windows\System32
+No escaping needed here: \ " \t \n
+Everything is literal!
+'''
+
+# Line ending backslash (removes newline in multiline basic strings)
+trimmed = """\
+   This text \
+   is all on \
+   one line.\
+   """
+
+# Mixed content
+mixed = "Normal text, \"quoted\", C:\\Path, \u00A9 2024"

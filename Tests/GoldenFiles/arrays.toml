@@ -1,0 +1,57 @@
+# Arrays in TOML
+
+# Simple arrays
+integers = [1, 2, 3, 4, 5]
+strings = ["red", "green", "blue"]
+booleans = [true, false, true]
+
+# Mixed spacing (whitespace is flexible)
+compact = [1,2,3,4,5]
+spaced = [ 1, 2, 3, 4, 5 ]
+
+# Multi-line arrays
+multiline = [
+  "first",
+  "second",
+  "third"
+]
+
+multiline_with_trailing_comma = [
+  1,
+  2,
+  3,
+]
+
+# Nested arrays (arrays of arrays)
+nested = [[1, 2], [3, 4], [5, 6]]
+matrix = [
+  [1, 2, 3],
+  [4, 5, 6],
+  [7, 8, 9]
+]
+
+# Arrays of different nesting levels (same base type)
+mixed_nesting = [[1, 2], [3, 4, 5]]
+
+# Empty array
+empty = []
+
+# Array of inline tables
+contributors = [
+  { name = "Alice", email = "alice@example.com" },
+  { name = "Bob", email = "bob@example.com" }
+]
+
+# Array of tables syntax
+[[products]]
+name = "Hammer"
+sku = 738594937
+
+[[products]]
+name = "Nail"
+sku = 284758393
+color = "gray"
+
+[[products]]
+name = "Screwdriver"
+sku = 284758394

@@ -1,0 +1,52 @@
+# Tables in TOML
+
+# Simple table
+[database]
+server = "192.168.1.1"
+port = 5432
+enabled = true
+
+# Multiple tables
+[servers]
+alpha = "10.0.0.1"
+beta = "10.0.0.2"
+
+[clients]
+data = [ ["gamma", "delta"], [1, 2] ]
+
+# Nested tables with dotted notation
+[owner]
+name = "Tom Preston-Werner"
+
+[owner.address]
+street = "123 Main St"
+city = "San Francisco"
+zip = "94102"
+
+# Alternative: Nested tables with section headers
+[application]
+name = "MyApp"
+
+[application.database]
+host = "localhost"
+port = 3306
+
+[application.database.credentials]
+username = "admin"
+password = "secret"
+
+# Dotted keys (inline)
+physical.color = "orange"
+physical.shape = "round"
+site."google.com" = true
+
+# Inline tables
+point = { x = 1, y = 2 }
+animal = { type = "cat", name = "Fluffy" }
+
+# Table after dotted keys (same parent)
+[physical]
+weight = 10
+
+# You can also nest inline tables
+metadata = { version = "1.0", author = { name = "Alice", email = "alice@example.com" } }

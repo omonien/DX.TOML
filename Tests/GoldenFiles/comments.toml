@@ -1,0 +1,48 @@
+# This is a full-line comment at the top
+# Comments can contain any characters: 世界 🌍 @#$%^&*()
+
+# Simple key-value with inline comment
+title = "TOML Example"  # This is an inline comment
+
+# Comments above values
+# The next line defines the version
+version = 1
+
+[server]  # Table with inline comment
+# Server configuration
+host = "localhost"  # Default host
+port = 8080  # HTTP port
+
+# Multiple comment lines
+# can be used to provide
+# detailed documentation
+timeout = 30
+
+[database]
+# Database connection settings
+# Format: host:port
+connection_string = "localhost:5432"
+
+# Comment between values
+enabled = true
+
+# Comments can have special characters
+# Symbols: !@#$%^&*()_+-={}[]|\:;"'<>,.?/
+# Unicode: 你好 مرحبا שלום Привет
+# Emoji: 🚀 🎉 ❤️ 🌟
+
+[[products]]
+name = "Widget"
+# Each product has a unique SKU
+sku = 123456
+
+# Empty lines with comments
+
+# Are totally fine
+
+[[products]]
+# Second product
+name = "Gadget"
+sku = 789012  # Another SKU
+
+# Comment at the end of the file

@@ -1,0 +1,19 @@
+# DateTime formats - RFC 3339
+
+# Offset Date-Time (with timezone)
+utc_datetime = 1979-05-27T07:32:00Z
+offset_datetime = 1979-05-27T00:32:00-07:00
+offset_datetime_positive = 1979-05-27T00:32:00+05:30
+
+# Local Date-Time (no timezone)
+local_datetime = 1979-05-27T07:32:00
+local_datetime_with_fraction = 1979-05-27T00:32:00.999999
+
+# Local Date (date only)
+birth_date = 1979-05-27
+independence_day = 1776-07-04
+
+# Local Time (time only)
+wake_time = 07:32:00
+alarm_time = 06:00:00
+precise_time = 12:34:56.789

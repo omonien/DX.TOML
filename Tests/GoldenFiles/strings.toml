@@ -1,0 +1,39 @@
+# String types in TOML
+
+# Basic strings (quotes)
+basic_string = "Hello, World!"
+escaped_quotes = "She said \"Hello\""
+escaped_backslash = "C:\\Users\\Documents"
+escaped_newline = "First line\nSecond line"
+escaped_tab = "Column1\tColumn2"
+
+# Literal strings (single quotes, no escaping)
+literal_string = 'C:\Users\Documents'
+literal_with_quotes = 'She said "Hello"'
+literal_backslash = 'No need to escape \ here'
+
+# Multi-line basic strings
+multiline_basic = """
+This is a multi-line
+basic string. It can span
+multiple lines."""
+
+multiline_with_escape = """\
+   The quick brown \
+   fox jumps over \
+   the lazy dog.\
+   """
+
+# Multi-line literal strings
+multiline_literal = '''
+This is a multi-line
+literal string. Backslashes
+are not escaped: C:\Users\Path
+'''
+
+# Unicode
+unicode_string = "Hello 世界 🌍"
+unicode_emoji = "Rocket: 🚀 Heart: ❤️"
+
+# Empty string
+empty = ""

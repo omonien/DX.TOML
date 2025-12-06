@@ -1,0 +1,65 @@
+# Unicode and International Characters
+
+# Latin scripts
+english = "Hello, World!"
+german = "Guten Tag"
+french = "Bonjour le monde"
+spanish = "¡Hola mundo!"
+
+# Non-Latin scripts
+chinese = "你好世界"
+japanese = "こんにちは世界"
+korean = "안녕하세요 세계"
+arabic = "مرحبا بالعالم"
+hebrew = "שלום עולם"
+russian = "Привет мир"
+greek = "Γεια σου κόσμε"
+thai = "สวัสดีชาวโลก"
+
+# Emoji
+emoji_faces = "😀 😃 😄 😁 😆 😅"
+emoji_symbols = "❤️ 💙 💚 💛 🧡 💜"
+emoji_animals = "🐶 🐱 🐭 🐹 🐰 🦊"
+emoji_food = "🍕 🍔 🍟 🌭 🍿 🥓"
+emoji_travel = "🚗 🚕 🚙 🚌 🚎 🏎"
+emoji_objects = "⌚ 📱 💻 ⌨ 🖥 🖨"
+
+# Mathematical symbols
+math = "∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)"
+
+# Currency symbols
+currencies = "$ £ € ¥ ₹ ₽ ₩"
+
+# Special characters
+special = "© ® ™ § ¶ † ‡ • ○ ◊"
+
+# Accented characters
+accented = "àáâãäåèéêëìíîïòóôõöùúûüýÿ"
+
+# Combined characters
+combined = "Ñoël"  # N + ˜, o + ¨, e + ´
+
+# Right-to-Left text
+rtl_arabic = "مرحبا"
+rtl_hebrew = "שלום"
+
+# Box drawing
+box = "┌─┬─┐│ ││ │├─┼─┤│ ││ │└─┴─┘"
+
+# Table with Unicode keys and values
+[中文]
+键 = "值"
+问候 = "你好"
+
+[日本語]
+キー = "値"
+挨拶 = "こんにちは"
+
+[Русский]
+ключ = "значение"
+приветствие = "Привет"
+
+# Quoted keys with special characters
+"key with spaces" = "value"
+"emoji 🚀 key" = "rocket"
+"key.with.dots" = "dotted"

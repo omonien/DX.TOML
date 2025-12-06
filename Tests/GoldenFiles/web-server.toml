@@ -1,0 +1,68 @@
+# Web Server Configuration
+
+[server]
+bind = "0.0.0.0"
+port = 8080
+workers = 8
+max_connections = 10000
+keep_alive_timeout = 60
+
+[server.tls]
+enabled = true
+cert_file = "/etc/ssl/certs/server.crt"
+key_file = "/etc/ssl/private/server.key"
+min_version = "1.2"
+ciphers = ["TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384"]
+
+[logging]
+access_log = "/var/log/nginx/access.log"
+error_log = "/var/log/nginx/error.log"
+log_level = "warn"
+
+[compression]
+enabled = true
+min_size = 1024
+types = ["text/html", "text/css", "application/javascript", "application/json"]
+
+[static_files]
+enabled = true
+root = "/var/www/html"
+index = ["index.html", "index.htm"]
+cache_max_age = 86400
+
+[cors]
+enabled = true
+allowed_origins = ["https://example.com", "https://www.example.com"]
+allowed_methods = ["GET", "POST", "PUT", "DELETE"]
+allowed_headers = ["Content-Type", "Authorization"]
+max_age = 3600
+
+[[virtual_hosts]]
+domain = "example.com"
+root = "/var/www/example.com"
+ssl = true
+
+[[virtual_hosts]]
+domain = "api.example.com"
+root = "/var/www/api"
+ssl = true
+
+[[virtual_hosts.redirects]]
+from = "/old-page"
+to = "/new-page"
+status = 301
+
+[rate_limiting]
+enabled = true
+requests_per_second = 100
+burst = 200
+
+[security]
+hide_server_version = true
+frame_options = "DENY"
+content_type_options = "nosniff"
+xss_protection = "1; mode=block"
+
+[security.headers]
+"Strict-Transport-Security" = "max-age=31536000; includeSubDomains"
+"Content-Security-Policy" = "default-src 'self'"

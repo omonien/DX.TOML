@@ -1,0 +1,88 @@
+# Database Configuration
+
+[database.primary]
+driver = "postgresql"
+host = "db-primary.example.com"
+port = 5432
+database = "production_db"
+username = "app_user"
+password = "secure_password"
+pool_size = 20
+max_overflow = 10
+pool_timeout = 30
+pool_recycle = 3600
+
+[database.primary.options]
+connect_timeout = 10
+statement_timeout = 30000
+idle_in_transaction_timeout = 60000
+ssl_mode = "require"
+application_name = "MyApp"
+
+[database.replica]
+driver = "postgresql"
+host = "db-replica.example.com"
+port = 5432
+database = "production_db"
+username = "readonly_user"
+password = "readonly_password"
+pool_size = 10
+max_overflow = 5
+
+[database.replica.options]
+connect_timeout = 10
+ssl_mode = "require"
+application_name = "MyApp-Readonly"
+
+[redis]
+host = "redis.example.com"
+port = 6379
+password = "redis_password"
+db = 0
+max_connections = 50
+socket_timeout = 5
+socket_connect_timeout = 5
+
+[redis.options]
+decode_responses = true
+retry_on_timeout = true
+health_check_interval = 30
+
+[mongodb]
+connection_string = "mongodb://mongo.example.com:27017"
+database = "myapp_db"
+username = "mongo_user"
+password = "mongo_password"
+max_pool_size = 100
+min_pool_size = 10
+server_selection_timeout = 30000
+
+[mongodb.options]
+retry_writes = true
+write_concern = "majority"
+read_preference = "primaryPreferred"
+
+[elasticsearch]
+hosts = ["es1.example.com:9200", "es2.example.com:9200", "es3.example.com:9200"]
+username = "elastic"
+password = "elastic_password"
+timeout = 30
+max_retries = 3
+retry_on_timeout = true
+
+[backup]
+enabled = true
+schedule = "0 2 * * *"  # Daily at 2 AM
+retention_days = 30
+destination = "s3://backups.example.com/database"
+compression = true
+
+[[backup.targets]]
+name = "primary"
+type = "full"
+schedule = "0 2 * * 0"  # Weekly full backup
+
+[[backup.targets]]
+name = "primary"
+type = "incremental"
+schedule = "0 2 * * 1-6"  # Daily incremental

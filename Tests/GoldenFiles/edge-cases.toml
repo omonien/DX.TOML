@@ -1,0 +1,75 @@
+# Edge Cases and Boundary Conditions
+
+# Empty values
+empty_string = ""
+empty_array = []
+
+# Whitespace in keys (using quotes)
+"key with spaces" = "value"
+"  leading spaces" = "value"
+"trailing spaces  " = "value"
+
+# Keys with special characters (quoted)
+"key.with.dots" = "dotted"
+"key-with-dashes" = "dashed"
+"key_with_underscores" = "underscored"
+"key@with#special$chars" = "special"
+
+# Very long strings
+long_string = "This is a very long string that goes on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on"
+
+# Maximum and minimum integers (64-bit signed)
+max_int = 9223372036854775807
+min_int = -9223372036854775808
+
+# Very small and very large floats
+small_float = 1e-308
+large_float = 1e308
+
+# Numbers with many underscores
+many_underscores = 1_2_3_4_5_6_7_8_9_0
+
+# Deeply nested tables
+[a]
+[a.b]
+[a.b.c]
+[a.b.c.d]
+[a.b.c.d.e]
+value = "deeply nested"
+
+# Multiple arrays of tables
+[[fruits]]
+name = "apple"
+color = "red"
+
+[[fruits]]
+name = "banana"
+color = "yellow"
+
+[[vegetables]]
+name = "carrot"
+color = "orange"
+
+[[vegetables]]
+name = "lettuce"
+color = "green"
+
+# Inline tables with various types
+mixed_inline = { string = "text", integer = 42, float = 3.14, bool = true }
+
+# Array with single element
+single_element = [42]
+
+# Multiline array with single element
+single_multiline = [
+  "only one"
+]
+
+# Boolean values (lowercase)
+bool_true = true
+bool_false = false
+
+# Numbers at boundaries
+zero = 0
+positive_zero = +0
+negative_zero = -0

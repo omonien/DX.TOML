@@ -1,0 +1,76 @@
+# Application Configuration Example
+
+[application]
+name = "MyWebApp"
+version = "1.2.3"
+description = "A sample web application"
+debug = false
+
+[application.server]
+host = "0.0.0.0"
+port = 8080
+workers = 4
+timeout = 30
+
+[application.logging]
+level = "info"
+format = "json"
+output = "/var/log/app.log"
+max_size_mb = 100
+rotation_count = 5
+
+[database]
+driver = "postgresql"
+host = "db.example.com"
+port = 5432
+database = "myapp_production"
+username = "app_user"
+password = "secure_password_here"
+pool_size = 10
+connection_timeout = 5000
+
+[database.options]
+ssl_mode = "require"
+timezone = "UTC"
+charset = "utf8mb4"
+
+[cache]
+enabled = true
+driver = "redis"
+host = "cache.example.com"
+port = 6379
+ttl = 3600
+prefix = "myapp:"
+
+[session]
+driver = "redis"
+lifetime = 7200
+cookie_name = "myapp_session"
+secure = true
+http_only = true
+
+[features]
+user_registration = true
+email_verification = true
+two_factor_auth = false
+api_access = true
+admin_panel = true
+
+[limits]
+max_upload_size_mb = 10
+rate_limit_per_minute = 60
+max_connections = 1000
+
+[email]
+driver = "smtp"
+host = "smtp.example.com"
+port = 587
+username = "noreply@example.com"
+from_address = "MyApp <noreply@example.com>"
+encryption = "tls"
+
+[monitoring]
+enabled = true
+service = "datadog"
+api_key = "dd_api_key_here"
+tags = ["env:production", "app:mywebapp"]

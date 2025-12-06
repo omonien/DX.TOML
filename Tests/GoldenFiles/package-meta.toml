@@ -1,0 +1,57 @@
+# Package Metadata (similar to Cargo.toml, pyproject.toml)
+
+[package]
+name = "dx-toml"
+version = "1.0.0"
+description = "A modern, spec-compliant TOML parser for Delphi"
+authors = ["DX.TOML Contributors"]
+license = "MIT"
+homepage = "https://github.com/example/dx-toml"
+repository = "https://github.com/example/dx-toml"
+documentation = "https://dx-toml.readthedocs.io"
+keywords = ["toml", "parser", "config", "delphi"]
+categories = ["parsing", "configuration"]
+readme = "README.md"
+
+[package.metadata]
+minimum_delphi_version = "11.0"
+platforms = ["Win32", "Win64", "OSX64", "Linux64"]
+
+[dependencies]
+# No external dependencies for DX.TOML
+
+[dev-dependencies]
+dunitx = "^19.0"
+
+[build]
+output_dir = "$(platform)/$(config)"
+dcu_dir = "$(platform)/$(config)/dcu"
+
+[features]
+default = ["round-trip", "validation"]
+round-trip = []
+validation = []
+ini-adapter = []
+
+[[examples]]
+name = "SimpleParser"
+path = "Samples/SimpleParser/SimpleParser.dpr"
+
+[[examples]]
+name = "ConfigReader"
+path = "Samples/ConfigReader/ConfigReader.dpr"
+
+[profile.debug]
+optimization = false
+assertions = true
+range_checking = true
+overflow_checking = true
+
+[profile.release]
+optimization = true
+assertions = false
+range_checking = false
+overflow_checking = false
+
+[badges]
+maintenance = { status = "actively-developed" }

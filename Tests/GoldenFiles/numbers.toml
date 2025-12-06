@@ -1,0 +1,39 @@
+# Number formats in TOML
+
+# Integers
+positive_int = 42
+negative_int = -17
+zero = 0
+
+# Large integers with underscores for readability
+large_number = 1_000_000
+very_large = 9_223_372_036_854_775_807
+
+# Hexadecimal (base 16, prefix 0x)
+hex_int = 0xDEADBEEF
+hex_lowercase = 0xdeadbeef
+
+# Octal (base 8, prefix 0o)
+octal_int = 0o755
+octal_permissions = 0o644
+
+# Binary (base 2, prefix 0b)
+binary_int = 0b11010110
+binary_flags = 0b1111_0000
+
+# Floats
+pi = 3.14159
+negative_float = -0.01
+float_with_underscores = 9_224_617.445_991_228
+
+# Exponent notation
+scientific = 1e6
+scientific_negative = 1e-6
+scientific_large = 6.02e23
+
+# Special float values
+positive_infinity = inf
+negative_infinity = -inf
+not_a_number = nan
+explicit_positive_inf = +inf
+explicit_negative_nan = -nan
