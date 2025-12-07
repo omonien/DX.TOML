@@ -1064,8 +1064,9 @@ begin
     end
     else
     begin
-      // Check for leading zeros (not allowed in TOML integers)
+      // Check for leading zeros (not allowed in TOML integer values)
       // Only check for integer/float types, not for date/time
+      // If has leading zeros, treat as bareword key instead of number
       if (LKind in [tkInteger, tkFloat]) then
       begin
         // Remove sign for checking
@@ -1074,9 +1075,10 @@ begin
           Delete(LCheckText, 1, 1);
 
         // Check for leading zero (but allow 0.x and 0ex for floats)
+        // Numbers with leading zeros like 000111 are treated as bareword keys
         if (Length(LCheckText) > 1) and (LCheckText[1] = '0') and
            not CharInSet(LCheckText[2], ['.', 'e', 'E']) then
-          raise Exception.Create('Leading zeros are not allowed');
+          LKind := tkBareKey;  // Treat as bareword key, not error
       end;
     end;
   end;
