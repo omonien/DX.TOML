@@ -1325,13 +1325,34 @@ end;
 function TTomlKeySyntax.GetFullKey: string;
 var
   i: Integer;
+  LSegment: string;
+  LNeedsQuoting: Boolean;
+  j: Integer;
 begin
   Result := '';
   for i := 0 to FSegments.Count - 1 do
   begin
     if i > 0 then
       Result := Result + '.';
-    Result := Result + FSegments[i];
+
+    LSegment := FSegments[i];
+
+    // Check if segment needs quoting (contains dot, space, or other special chars)
+    LNeedsQuoting := False;
+    for j := 1 to Length(LSegment) do
+    begin
+      if CharInSet(LSegment[j], ['.', ' ', #9, '"', '''', '[', ']', '{', '}', '=', '#']) then
+      begin
+        LNeedsQuoting := True;
+        Break;
+      end;
+    end;
+
+    // Quote segment if needed to distinguish a."b.c" from a.b.c
+    if LNeedsQuoting then
+      Result := Result + '"' + StringReplace(LSegment, '"', '\"', [rfReplaceAll]) + '"'
+    else
+      Result := Result + LSegment;
   end;
 end;
 
