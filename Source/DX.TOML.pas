@@ -1577,10 +1577,14 @@ var
   LChar: Char;
   LIsLiteral: Boolean;  // True for single-quoted strings (literal)
   LDelimiter: Char;
+  LIsMultiline: Boolean;  // True for triple-quoted strings
+  LFirstChar: Boolean;    // Track if this is the first character after opening quotes
 begin
   Result := '';
   LInString := False;
   LIsLiteral := False;
+  LIsMultiline := False;
+  LFirstChar := False;
 
   i := 1;
   while i <= Length(AText) do
@@ -1594,9 +1598,30 @@ begin
         LInString := True;
         LDelimiter := LChar;
         LIsLiteral := (LChar = '''');  // Single quote = literal string
+
+        // Check if it's a multiline string (triple quotes)
+        if (i + 2 <= Length(AText)) and
+           (AText[i + 1] = LDelimiter) and
+           (AText[i + 2] = LDelimiter) then
+        begin
+          LIsMultiline := True;
+          LFirstChar := True;
+          Inc(i, 2);  // Skip the extra two quotes
+        end;
       end;
       Inc(i);
       Continue;
+    end;
+
+    // For multiline strings, skip the first newline immediately after opening quotes
+    if LFirstChar then
+    begin
+      LFirstChar := False;
+      if LChar = #10 then
+      begin
+        Inc(i);
+        Continue;
+      end;
     end;
 
     // In literal strings (single quotes), backslashes are not escape characters
@@ -1722,6 +1747,12 @@ begin
     else if LToken.Kind = tkString then
     begin
       LKey.AddSegment(ParseString(LToken.Text));
+      Advance;
+    end
+    else if LToken.Kind in [tkInteger, tkFloat] then
+    begin
+      // TOML allows numeric keys (barewords that look like numbers)
+      LKey.AddSegment(LToken.Text);
       Advance;
     end
     else
