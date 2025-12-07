@@ -230,6 +230,11 @@ var
   LToml: string;
   LJson: string;
 begin
+  // Set console to UTF-8 for proper Unicode I/O
+  SetTextCodePage(Input, CP_UTF8);
+  SetTextCodePage(Output, CP_UTF8);
+  SetTextCodePage(ErrOutput, CP_UTF8);
+
   try
     // Read TOML from stdin
     LInput := TStringList.Create;
