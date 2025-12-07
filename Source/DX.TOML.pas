@@ -1770,9 +1770,9 @@ begin
       LKey.AddSegment(ParseString(LToken.Text));
       Advance;
     end
-    else if LToken.Kind in [tkInteger, tkFloat] then
+    else if LToken.Kind in [tkInteger, tkFloat, tkBoolean] then
     begin
-      // TOML allows numeric keys (barewords that look like numbers)
+      // TOML allows numeric and special word keys (numbers, inf, nan, true, false)
       LKey.AddSegment(LToken.Text);
       Advance;
     end
