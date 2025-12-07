@@ -76,3 +76,9 @@ GTAGS
 *.fbl8
 *.fbpbrk
 *.fb8lck
+
+# Test artifacts
+dunitx-results.xml
+toml-test-results.txt
+Tests/TestDebug.dpr
+Tests/nul
