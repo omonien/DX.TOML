@@ -709,7 +709,7 @@ begin
   Advance;
 
   // Read until end of line
-  while not IsEof and not (GetCurrentChar in [#10, #13]) do
+  while not IsEof and not CharInSet(GetCurrentChar, [#10, #13]) do
   begin
     LText := LText + GetCurrentChar;
     Advance;
@@ -858,14 +858,14 @@ begin
   LKind := tkInteger;
 
   // Handle sign
-  if GetCurrentChar in ['+', '-'] then
+  if CharInSet(GetCurrentChar, ['+', '-']) then
   begin
     LText := LText + GetCurrentChar;
     Advance;
   end;
 
   // Handle special prefixes (0x, 0o, 0b)
-  if (GetCurrentChar = '0') and (GetLookahead(1) in ['x', 'o', 'b']) then
+  if (GetCurrentChar = '0') and CharInSet(GetLookahead(1), ['x', 'o', 'b']) then
   begin
     LPrefix := GetLookahead(1);
     LText := LText + GetCurrentChar;
@@ -888,13 +888,13 @@ begin
 
       case LPrefix of
         'x': // Hex: 0-9, A-F, a-f
-          if not (LText[i] in ['0'..'9', 'A'..'F', 'a'..'f']) then
+          if not CharInSet(LText[i], ['0'..'9', 'A'..'F', 'a'..'f']) then
             raise Exception.Create(Format('Invalid hex digit: %s', [LText[i]]));
         'o': // Octal: 0-7
-          if not (LText[i] in ['0'..'7']) then
+          if not CharInSet(LText[i], ['0'..'7']) then
             raise Exception.Create(Format('Invalid octal digit: %s', [LText[i]]));
         'b': // Binary: 0-1
-          if not (LText[i] in ['0'..'1']) then
+          if not CharInSet(LText[i], ['0'..'1']) then
             raise Exception.Create(Format('Invalid binary digit: %s', [LText[i]]));
       end;
     end;
@@ -923,13 +923,13 @@ begin
     end;
 
     // Check for exponent
-    if GetCurrentChar in ['e', 'E'] then
+    if CharInSet(GetCurrentChar, ['e', 'E']) then
     begin
       LKind := tkFloat;
       LText := LText + GetCurrentChar;
       Advance;
 
-      if GetCurrentChar in ['+', '-'] then
+      if CharInSet(GetCurrentChar, ['+', '-']) then
       begin
         LText := LText + GetCurrentChar;
         Advance;
@@ -976,7 +976,7 @@ begin
           Advance;
 
           // Read time part (HH:MM:SS)
-          while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar in [':', '.'])) do
+          while not IsEof and (IsDigit(GetCurrentChar) or CharInSet(GetCurrentChar, [':', '.'])) do
           begin
             LText := LText + GetCurrentChar;
             Advance;
@@ -988,7 +988,7 @@ begin
             LText := LText + GetCurrentChar;
             Advance;
           end
-          else if GetCurrentChar in ['+', '-'] then
+          else if CharInSet(GetCurrentChar, ['+', '-']) then
           begin
             LText := LText + GetCurrentChar;
             Advance;
@@ -1015,7 +1015,7 @@ begin
       Advance;
 
       // Read rest of time
-      while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar in [':', '.'])) do
+      while not IsEof and (IsDigit(GetCurrentChar) or CharInSet(GetCurrentChar, [':', '.'])) do
       begin
         LText := LText + GetCurrentChar;
         Advance;
@@ -1028,7 +1028,7 @@ begin
     begin
       // Remove sign for checking
       LCheckText := LText;
-      if (Length(LCheckText) > 0) and (LCheckText[1] in ['+', '-']) then
+      if (Length(LCheckText) > 0) and CharInSet(LCheckText[1], ['+', '-']) then
         Delete(LCheckText, 1, 1);
 
       // Check for leading zero
@@ -1562,7 +1562,7 @@ begin
 
     if not LInString then
     begin
-      if LChar in ['"', ''''] then
+      if CharInSet(LChar, ['"', '''']) then
         LInString := True;
       Inc(i);
       Continue;
@@ -1591,7 +1591,7 @@ begin
         end;
       end;
     end
-    else if LChar in ['"', ''''] then
+    else if CharInSet(LChar, ['"', '''']) then
     begin
       LInString := False;
     end
