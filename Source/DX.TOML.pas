@@ -1575,9 +1575,12 @@ var
   i: Integer;
   LInString: Boolean;
   LChar: Char;
+  LIsLiteral: Boolean;  // True for single-quoted strings (literal)
+  LDelimiter: Char;
 begin
   Result := '';
   LInString := False;
+  LIsLiteral := False;
 
   i := 1;
   while i <= Length(AText) do
@@ -1587,12 +1590,17 @@ begin
     if not LInString then
     begin
       if CharInSet(LChar, ['"', '''']) then
+      begin
         LInString := True;
+        LDelimiter := LChar;
+        LIsLiteral := (LChar = '''');  // Single quote = literal string
+      end;
       Inc(i);
       Continue;
     end;
 
-    if LChar = '\' then
+    // In literal strings (single quotes), backslashes are not escape characters
+    if (LChar = '\') and (not LIsLiteral) then
     begin
       // Handle escape sequences
       Inc(i);
@@ -1673,8 +1681,9 @@ begin
         end;
       end;
     end
-    else if CharInSet(LChar, ['"', '''']) then
+    else if (LChar = LDelimiter) then
     begin
+      // Only end string if we see the matching delimiter
       LInString := False;
     end
     else

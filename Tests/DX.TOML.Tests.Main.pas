@@ -192,6 +192,16 @@ type
     procedure TestHexNumbers;
   end;
 
+  [TestFixture]
+  TTomlLiteralStringTests = class
+  public
+    [Test]
+    procedure TestLiteralStringsNoEscapes;
+
+    [Test]
+    procedure TestLiteralStringsWithQuotes;
+  end;
+
 implementation
 
 { TTomlLexerTests }
@@ -1091,6 +1101,59 @@ begin
 
     Assert.IsTrue(LTable.ContainsKey('hex3'), 'Should have hex3 key');
     Assert.AreEqual(Int64(255), LTable['hex3'].AsInteger, '0x00FF should be 255');
+  finally
+    LTable.Free;
+  end;
+end;
+
+{ TTomlLiteralStringTests }
+
+procedure TTomlLiteralStringTests.TestLiteralStringsNoEscapes;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Literal strings (single quotes) should not process escape sequences
+  LToml := 'path = ''C:\Users\nodejs\templates''' + sLineBreak +
+           'backslash = ''\\ServerX\admin$\system32\''' + sLineBreak +
+           'regex = ''<\i\c*\s*>''';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('path'), 'Should have path key');
+    Assert.AreEqual('C:\Users\nodejs\templates', LTable['path'].AsString,
+      'Backslashes should be literal');
+
+    Assert.IsTrue(LTable.ContainsKey('backslash'), 'Should have backslash key');
+    Assert.AreEqual('\\ServerX\admin$\system32\', LTable['backslash'].AsString,
+      'Backslashes should be preserved');
+
+    Assert.IsTrue(LTable.ContainsKey('regex'), 'Should have regex key');
+    Assert.AreEqual('<\i\c*\s*>', LTable['regex'].AsString,
+      'Regex backslashes should be literal');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlLiteralStringTests.TestLiteralStringsWithQuotes;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Literal strings can contain double quotes
+  LToml := 'quoted = ''Tom "Dubs" Preston-Werner''' + sLineBreak +
+           'mixed = ''She said "hello" to me''';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('quoted'), 'Should have quoted key');
+    Assert.AreEqual('Tom "Dubs" Preston-Werner', LTable['quoted'].AsString,
+      'Double quotes should be preserved in literal strings');
+
+    Assert.IsTrue(LTable.ContainsKey('mixed'), 'Should have mixed key');
+    Assert.AreEqual('She said "hello" to me', LTable['mixed'].AsString,
+      'Double quotes should work in literal strings');
   finally
     LTable.Free;
   end;
