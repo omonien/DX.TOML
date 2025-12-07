@@ -1679,6 +1679,13 @@ begin
     end
     else
     begin
+      // Normalize line endings: CRLF -> LF
+      if (LChar = #13) and (i + 1 <= Length(AText)) and (AText[i + 1] = #10) then
+      begin
+        // Skip the CR, the LF will be added in the next iteration
+        Inc(i);
+        Continue;
+      end;
       Result := Result + LChar;
     end;
 
@@ -2364,17 +2371,49 @@ end;
 class function TTomlDomBuilder.ParseInteger(const AText: string): Int64;
 var
   LClean: string;
+  LDigits: string;
+  i: Integer;
+  LDigit: Integer;
 begin
   // Remove underscores
   LClean := AText.Replace('_', '', [rfReplaceAll]);
 
   // Handle special bases
   if LClean.StartsWith('0x') then
-    Result := StrToInt64('$' + LClean.Substring(2))
+  begin
+    // Hexadecimal - use $ prefix for Delphi
+    Result := StrToInt64('$' + LClean.Substring(2));
+  end
   else if LClean.StartsWith('0o') then
-    Result := StrToInt64(LClean.Substring(2))  // Simplified
+  begin
+    // Octal - manual conversion
+    LDigits := LClean.Substring(2);
+    Result := 0;
+    for i := 1 to Length(LDigits) do
+    begin
+      LDigit := Ord(LDigits[i]) - Ord('0');
+      if (LDigit < 0) or (LDigit > 7) then
+        raise ETomlParserException.Create(
+          Format('Invalid octal digit: %s', [LDigits[i]]),
+          TTomlPosition.Create(1, 1, 0));
+      Result := Result * 8 + LDigit;
+    end;
+  end
   else if LClean.StartsWith('0b') then
-    Result := StrToInt64(LClean.Substring(2))  // Simplified
+  begin
+    // Binary - manual conversion
+    LDigits := LClean.Substring(2);
+    Result := 0;
+    for i := 1 to Length(LDigits) do
+    begin
+      LDigit := Ord(LDigits[i]) - Ord('0');
+      if (LDigit < 0) or (LDigit > 1) then
+        raise ETomlParserException.Create(
+          Format('Invalid binary digit: %s', [LDigits[i]]),
+          TTomlPosition.Create(1, 1, 0));
+      Result := Result * 2 + LDigit;
+    end;
+  end
   else
     Result := StrToInt64(LClean);
 end;

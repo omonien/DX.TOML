@@ -179,6 +179,19 @@ type
     procedure TestNaNValues;
   end;
 
+  [TestFixture]
+  TTomlNumberBaseTests = class
+  public
+    [Test]
+    procedure TestBinaryNumbers;
+
+    [Test]
+    procedure TestOctalNumbers;
+
+    [Test]
+    procedure TestHexNumbers;
+  end;
+
 implementation
 
 { TTomlLexerTests }
@@ -1001,6 +1014,83 @@ begin
 
     Assert.IsTrue(LTable.ContainsKey('nan3'), 'Should have nan3 key');
     Assert.IsTrue(IsNaN(LTable['nan3'].AsFloat), '-nan should be parsed as NaN');
+  finally
+    LTable.Free;
+  end;
+end;
+
+{ TTomlNumberBaseTests }
+
+procedure TTomlNumberBaseTests.TestBinaryNumbers;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Test binary number literals
+  LToml := 'bin1 = 0b11010110' + sLineBreak +
+           'bin2 = 0b1010' + sLineBreak +
+           'bin3 = 0b1111_0000';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('bin1'), 'Should have bin1 key');
+    Assert.AreEqual(Int64(214), LTable['bin1'].AsInteger, '0b11010110 should be 214');
+
+    Assert.IsTrue(LTable.ContainsKey('bin2'), 'Should have bin2 key');
+    Assert.AreEqual(Int64(10), LTable['bin2'].AsInteger, '0b1010 should be 10');
+
+    Assert.IsTrue(LTable.ContainsKey('bin3'), 'Should have bin3 key');
+    Assert.AreEqual(Int64(240), LTable['bin3'].AsInteger, '0b1111_0000 should be 240');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlNumberBaseTests.TestOctalNumbers;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Test octal number literals
+  LToml := 'oct1 = 0o755' + sLineBreak +
+           'oct2 = 0o644' + sLineBreak +
+           'oct3 = 0o01234567';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('oct1'), 'Should have oct1 key');
+    Assert.AreEqual(Int64(493), LTable['oct1'].AsInteger, '0o755 should be 493');
+
+    Assert.IsTrue(LTable.ContainsKey('oct2'), 'Should have oct2 key');
+    Assert.AreEqual(Int64(420), LTable['oct2'].AsInteger, '0o644 should be 420');
+
+    Assert.IsTrue(LTable.ContainsKey('oct3'), 'Should have oct3 key');
+    Assert.AreEqual(Int64(342391), LTable['oct3'].AsInteger, '0o01234567 should be 342391');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlNumberBaseTests.TestHexNumbers;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Test hexadecimal number literals
+  LToml := 'hex1 = 0xDEADBEEF' + sLineBreak +
+           'hex2 = 0xdeadbeef' + sLineBreak +
+           'hex3 = 0x00FF';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('hex1'), 'Should have hex1 key');
+    Assert.AreEqual(Int64(3735928559), LTable['hex1'].AsInteger, '0xDEADBEEF should be 3735928559');
+
+    Assert.IsTrue(LTable.ContainsKey('hex2'), 'Should have hex2 key');
+    Assert.AreEqual(Int64(3735928559), LTable['hex2'].AsInteger, '0xdeadbeef should be 3735928559');
+
+    Assert.IsTrue(LTable.ContainsKey('hex3'), 'Should have hex3 key');
+    Assert.AreEqual(Int64(255), LTable['hex3'].AsInteger, '0x00FF should be 255');
   finally
     LTable.Free;
   end;
