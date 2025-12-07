@@ -824,17 +824,44 @@ begin
   begin
     if GetCurrentChar = ADelimiter then
     begin
-      // Count consecutive quotes
+      // Look ahead to count consecutive quotes
       LQuoteCount := 0;
-      while (not IsEof) and (GetCurrentChar = ADelimiter) and (LQuoteCount < 3) do
+      var LSavedPos := FPosition;
+      var LSavedLine := FLine;
+      var LSavedColumn := FColumn;
+
+      while (not IsEof) and (GetCurrentChar = ADelimiter) do
       begin
-        LText := LText + GetCurrentChar;
-        Advance;
         Inc(LQuoteCount);
+        Advance;
       end;
 
-      if LQuoteCount = 3 then
+      // Restore position
+      FPosition := LSavedPos;
+      FLine := LSavedLine;
+      FColumn := LSavedColumn;
+
+      // If we found 3+ quotes, the first 3 are the closing delimiter
+      if LQuoteCount >= 3 then
+      begin
+        // Add the 3 closing quotes to text
+        LText := LText + ADelimiter;
+        Advance;
+        LText := LText + ADelimiter;
+        Advance;
+        LText := LText + ADelimiter;
+        Advance;
         Break;
+      end
+      else
+      begin
+        // Less than 3 quotes - they're part of the string content
+        for var i := 1 to LQuoteCount do
+        begin
+          LText := LText + ADelimiter;
+          Advance;
+        end;
+      end;
     end
     else
     begin
@@ -1842,8 +1869,29 @@ begin
     end
     else if (LChar = LDelimiter) then
     begin
-      // Only end string if we see the matching delimiter
-      LInString := False;
+      // Check if this is the closing delimiter
+      if LIsMultiline then
+      begin
+        // For multiline strings, need 3 consecutive delimiters
+        if (i + 2 <= Length(AText)) and
+           (AText[i + 1] = LDelimiter) and
+           (AText[i + 2] = LDelimiter) then
+        begin
+          // Found closing """
+          LInString := False;
+          Inc(i, 2);  // Skip the next two delimiters
+        end
+        else
+        begin
+          // Single or double quote inside multiline string - include it
+          Result := Result + LChar;
+        end;
+      end
+      else
+      begin
+        // Single-line string - one delimiter closes it
+        LInString := False;
+      end;
     end
     else
     begin
