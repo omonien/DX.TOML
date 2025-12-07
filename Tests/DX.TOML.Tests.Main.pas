@@ -18,6 +18,7 @@ uses
   System.Classes,
   System.IOUtils,
   System.DateUtils,
+  System.Math,
   DX.TOML;
 
 type
@@ -153,6 +154,29 @@ type
 
     [Test]
     procedure TestArrayOfTablesWithSubtables;
+  end;
+
+  [TestFixture]
+  TTomlUnicodeEscapeTests = class
+  public
+    [Test]
+    procedure TestBasicUnicodeEscape;
+
+    [Test]
+    procedure TestExtendedUnicodeEscape;
+
+    [Test]
+    procedure TestUnicodeSurrogatePair;
+  end;
+
+  [TestFixture]
+  TTomlSpecialFloatTests = class
+  public
+    [Test]
+    procedure TestInfinityValues;
+
+    [Test]
+    procedure TestNaNValues;
   end;
 
 implementation
@@ -843,6 +867,140 @@ begin
     Assert.IsTrue(LItem.ContainsKey('subtab'), 'Second element should have subtab');
     LSubtab := LItem['subtab'].AsTable;
     Assert.AreEqual(Int64(2), LSubtab['val'].AsInteger, 'Second subtab val should be 2');
+  finally
+    LTable.Free;
+  end;
+end;
+
+{ TTomlUnicodeEscapeTests }
+
+procedure TTomlUnicodeEscapeTests.TestBasicUnicodeEscape;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Test \uXXXX escape sequences (4 hex digits)
+  LToml := 'basic = "\u0041\u0042\u0043"' + sLineBreak +
+           'special = "\u00E9\u00E8\u00EA"' + sLineBreak +  // éèê
+           'symbol = "\u2603"';  // ☃ snowman
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('basic'), 'Should have basic key');
+    Assert.AreEqual('ABC', LTable['basic'].AsString, 'Should decode \u0041\u0042\u0043 to ABC');
+
+    Assert.IsTrue(LTable.ContainsKey('special'), 'Should have special key');
+    Assert.AreEqual(#$00E9#$00E8#$00EA, LTable['special'].AsString, 'Should decode French accents');
+
+    Assert.IsTrue(LTable.ContainsKey('symbol'), 'Should have symbol key');
+    Assert.AreEqual(#$2603, LTable['symbol'].AsString, 'Should decode snowman symbol');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlUnicodeEscapeTests.TestExtendedUnicodeEscape;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Test \UXXXXXXXX escape sequences (8 hex digits)
+  LToml := 'basic = "\U00000041\U00000042\U00000043"' + sLineBreak +
+           'emoji = "\U0001F914"';  // 🤔 thinking face
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('basic'), 'Should have basic key');
+    Assert.AreEqual('ABC', LTable['basic'].AsString, 'Should decode \U00000041-43 to ABC');
+
+    Assert.IsTrue(LTable.ContainsKey('emoji'), 'Should have emoji key');
+    // Emoji is encoded as UTF-16 surrogate pair
+    var LExpected := Char($D83E) + Char($DD14);  // UTF-16 encoding of U+1F914
+    Assert.AreEqual(LExpected, LTable['emoji'].AsString, 'Should decode thinking face emoji');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlUnicodeEscapeTests.TestUnicodeSurrogatePair;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Test Unicode characters that require surrogate pairs (> U+FFFF)
+  LToml := 'rocket = "\U0001F680"' + sLineBreak +  // 🚀
+           'smile = "\U0001F600"' + sLineBreak +    // 😀
+           'heart = "\U00002764"';                   // ❤ (doesn't need surrogate)
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('rocket'), 'Should have rocket key');
+    var LRocket := LTable['rocket'].AsString;
+    Assert.AreEqual(2, Length(LRocket), 'Rocket emoji should be 2 chars (surrogate pair)');
+
+    Assert.IsTrue(LTable.ContainsKey('smile'), 'Should have smile key');
+    var LSmile := LTable['smile'].AsString;
+    Assert.AreEqual(2, Length(LSmile), 'Smile emoji should be 2 chars (surrogate pair)');
+
+    Assert.IsTrue(LTable.ContainsKey('heart'), 'Should have heart key');
+    var LHeart := LTable['heart'].AsString;
+    Assert.AreEqual(1, Length(LHeart), 'Heart should be 1 char (BMP)');
+    Assert.AreEqual(#$2764, LHeart, 'Should decode heart symbol correctly');
+  finally
+    LTable.Free;
+  end;
+end;
+
+{ TTomlSpecialFloatTests }
+
+procedure TTomlSpecialFloatTests.TestInfinityValues;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Test infinity float literals
+  LToml := 'inf1 = inf' + sLineBreak +
+           'inf2 = +inf' + sLineBreak +
+           'inf3 = -inf';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('inf1'), 'Should have inf1 key');
+    Assert.IsTrue(IsInfinite(LTable['inf1'].AsFloat), 'inf should be parsed as Infinity');
+    Assert.IsTrue(LTable['inf1'].AsFloat > 0, 'inf should be positive infinity');
+
+    Assert.IsTrue(LTable.ContainsKey('inf2'), 'Should have inf2 key');
+    Assert.IsTrue(IsInfinite(LTable['inf2'].AsFloat), '+inf should be parsed as Infinity');
+    Assert.IsTrue(LTable['inf2'].AsFloat > 0, '+inf should be positive infinity');
+
+    Assert.IsTrue(LTable.ContainsKey('inf3'), 'Should have inf3 key');
+    Assert.IsTrue(IsInfinite(LTable['inf3'].AsFloat), '-inf should be parsed as -Infinity');
+    Assert.IsTrue(LTable['inf3'].AsFloat < 0, '-inf should be negative infinity');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlSpecialFloatTests.TestNaNValues;
+var
+  LToml: string;
+  LTable: TToml;
+begin
+  // Test NaN float literals
+  LToml := 'nan1 = nan' + sLineBreak +
+           'nan2 = +nan' + sLineBreak +
+           'nan3 = -nan';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('nan1'), 'Should have nan1 key');
+    Assert.IsTrue(IsNaN(LTable['nan1'].AsFloat), 'nan should be parsed as NaN');
+
+    Assert.IsTrue(LTable.ContainsKey('nan2'), 'Should have nan2 key');
+    Assert.IsTrue(IsNaN(LTable['nan2'].AsFloat), '+nan should be parsed as NaN');
+
+    Assert.IsTrue(LTable.ContainsKey('nan3'), 'Should have nan3 key');
+    Assert.IsTrue(IsNaN(LTable['nan3'].AsFloat), '-nan should be parsed as NaN');
   finally
     LTable.Free;
   end;
