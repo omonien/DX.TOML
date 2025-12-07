@@ -1578,13 +1578,11 @@ var
   LIsLiteral: Boolean;  // True for single-quoted strings (literal)
   LDelimiter: Char;
   LIsMultiline: Boolean;  // True for triple-quoted strings
-  LFirstChar: Boolean;    // Track if this is the first character after opening quotes
 begin
   Result := '';
   LInString := False;
   LIsLiteral := False;
   LIsMultiline := False;
-  LFirstChar := False;
 
   i := 1;
   while i <= Length(AText) do
@@ -1605,23 +1603,25 @@ begin
            (AText[i + 2] = LDelimiter) then
         begin
           LIsMultiline := True;
-          LFirstChar := True;
           Inc(i, 2);  // Skip the extra two quotes
+
+          // Skip the first newline immediately after opening triple quotes
+          // Could be LF (\n) or CRLF (\r\n)
+          if (i + 1 <= Length(AText)) then
+          begin
+            if (AText[i + 1] = #13) and (i + 2 <= Length(AText)) and (AText[i + 2] = #10) then
+            begin
+              Inc(i, 2);  // Skip CRLF
+            end
+            else if (AText[i + 1] = #10) then
+            begin
+              Inc(i);  // Skip LF
+            end;
+          end;
         end;
       end;
       Inc(i);
       Continue;
-    end;
-
-    // For multiline strings, skip the first newline immediately after opening quotes
-    if LFirstChar then
-    begin
-      LFirstChar := False;
-      if LChar = #10 then
-      begin
-        Inc(i);
-        Continue;
-      end;
     end;
 
     // In literal strings (single quotes), backslashes are not escape characters
@@ -1697,6 +1697,25 @@ begin
               else
                 raise ETomlParserException.Create(
                   'Incomplete Unicode escape sequence: \U requires 8 hex digits',
+                  TTomlPosition.Create(1, 1, 0));
+            end;
+          #10, #13:
+            begin
+              // Line-ending backslash in multiline strings
+              // Skip the newline and any following whitespace
+              if LIsMultiline then
+              begin
+                // Skip CRLF or LF
+                if (AText[i] = #13) and (i + 1 <= Length(AText)) and (AText[i + 1] = #10) then
+                  Inc(i);  // Skip LF after CR
+
+                // Skip any whitespace at the beginning of the next line
+                while (i + 1 <= Length(AText)) and CharInSet(AText[i + 1], [' ', #9, #10, #13]) do
+                  Inc(i);
+              end
+              else
+                raise ETomlParserException.Create(
+                  'Line-ending backslash only allowed in multiline strings',
                   TTomlPosition.Create(1, 1, 0));
             end;
         else
