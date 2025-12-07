@@ -1057,8 +1057,9 @@ begin
       if (Length(LCheckText) > 0) and CharInSet(LCheckText[1], ['+', '-']) then
         Delete(LCheckText, 1, 1);
 
-      // Check for leading zero
-      if (Length(LCheckText) > 1) and (LCheckText[1] = '0') and (LCheckText[2] <> '.') then
+      // Check for leading zero (but allow 0.x and 0ex for floats)
+      if (Length(LCheckText) > 1) and (LCheckText[1] = '0') and
+         not CharInSet(LCheckText[2], ['.', 'e', 'E']) then
         raise Exception.Create('Leading zeros are not allowed');
     end;
   end;
