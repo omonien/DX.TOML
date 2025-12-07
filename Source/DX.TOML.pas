@@ -141,7 +141,6 @@ type
     function IsWhitespace(AChar: Char): Boolean;
     function IsBareKeyChar(AChar: Char): Boolean;
     function IsDigit(AChar: Char): Boolean;
-    function IsHexDigit(AChar: Char): Boolean;
   public
     constructor Create(const ASource: string);
     destructor Destroy; override;
@@ -358,7 +357,6 @@ type
     FDocument: TTomlDocumentSyntax;
 
     function GetCurrentToken: TTomlToken;
-    function GetLookahead(AOffset: Integer): TTomlToken;
     function IsEof: Boolean;
 
     procedure Advance;
@@ -679,11 +677,6 @@ end;
 function TTomlLexer.IsDigit(AChar: Char): Boolean;
 begin
   Result := AChar.IsDigit;
-end;
-
-function TTomlLexer.IsHexDigit(AChar: Char): Boolean;
-begin
-  Result := AChar.IsDigit or (AChar in ['a'..'f', 'A'..'F']);
 end;
 
 procedure TTomlLexer.ScanWhitespace;
@@ -1504,17 +1497,6 @@ begin
     Result := FTokens[FTokens.Count - 1]  // Return EOF token
   else
     Result := FTokens[FPosition];
-end;
-
-function TTomlParser.GetLookahead(AOffset: Integer): TTomlToken;
-var
-  LPos: Integer;
-begin
-  LPos := FPosition + AOffset;
-  if (LPos < 0) or (LPos >= FTokens.Count) then
-    Result := FTokens[FTokens.Count - 1]  // Return EOF token
-  else
-    Result := FTokens[LPos];
 end;
 
 function TTomlParser.IsEof: Boolean;
@@ -2338,14 +2320,11 @@ end;
 
 class function TTomlDomBuilder.ParseDateTime(const AText: string): TDateTime;
 var
-  LDatePart, LTimePart, LOffsetPart: string;
+  LDatePart, LTimePart: string;
   LYear, LMonth, LDay: Word;
   LHour, LMin, LSec: Word;
-  LMSec: Word;
   LPos, LTPos, LDotPos: Integer;
   LDate, LTime: TDateTime;
-  LOffsetHours, LOffsetMins: Integer;
-  LIsNegativeOffset: Boolean;
 begin
   // RFC 3339 DateTime formats:
   // - Offset DateTime: 1979-05-27T07:32:00-08:00 or 1979-05-27T07:32:00Z
@@ -2423,20 +2402,10 @@ begin
 
   if LPos > 0 then
   begin
-    LOffsetPart := Copy(LTimePart, LPos, Length(LTimePart));
+    // Strip timezone offset (Z, +HH:MM, or -HH:MM)
     LTimePart := Copy(LTimePart, 1, LPos - 1);
-
-    // Parse offset if not 'Z'
-    if UpperCase(LOffsetPart) <> 'Z' then
-    begin
-      LIsNegativeOffset := LOffsetPart[1] = '-';
-      LOffsetPart := Copy(LOffsetPart, 2, Length(LOffsetPart));
-      LOffsetHours := StrToInt(Copy(LOffsetPart, 1, 2));
-      LOffsetMins := StrToInt(Copy(LOffsetPart, 4, 2));
-
-      // Note: For simplicity, we store as local time without applying offset
-      // Full implementation would convert to UTC or local timezone
-    end;
+    // Note: For simplicity, we store as local time without applying offset
+    // Full implementation would convert to UTC or local timezone
   end;
 
   // Parse time part (handle fractional seconds)
@@ -2503,11 +2472,11 @@ var
   LFirstKind: TTomlValueKind;
   LFirstArray: TTomlArray;
   LFirstArrayElementKind: TTomlValueKind;
-  i: Integer;
 begin
   LArray := TTomlArray.Create;
   LFirstKind := tvkString;  // Initialize with dummy value
   LFirstArray := nil;
+  LFirstArrayElementKind := tvkString;  // Initialize with dummy value
 
   for LElement in ANode.Elements do
   begin
