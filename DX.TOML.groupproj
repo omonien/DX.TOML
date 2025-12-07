@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{4AFABCB2-51F8-47AE-87B6-CC5BAEF5237F}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="Tests\toml-test-adapter\DX.TOML.TestAdapter.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Tests\DX.TOML.Tests.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="DX_TOML_TestAdapter">
+        <MSBuild Projects="Tests\toml-test-adapter\DX.TOML.TestAdapter.dproj"/>
+    </Target>
+    <Target Name="DX_TOML_TestAdapter:Clean">
+        <MSBuild Projects="Tests\toml-test-adapter\DX.TOML.TestAdapter.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DX_TOML_TestAdapter:Make">
+        <MSBuild Projects="Tests\toml-test-adapter\DX.TOML.TestAdapter.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="DX_TOML_Tests">
+        <MSBuild Projects="Tests\DX.TOML.Tests.dproj"/>
+    </Target>
+    <Target Name="DX_TOML_Tests:Clean">
+        <MSBuild Projects="Tests\DX.TOML.Tests.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DX_TOML_Tests:Make">
+        <MSBuild Projects="Tests\DX.TOML.Tests.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="DX_TOML_TestAdapter;DX_TOML_Tests"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="DX_TOML_TestAdapter:Clean;DX_TOML_Tests:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="DX_TOML_TestAdapter:Make;DX_TOML_Tests:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
