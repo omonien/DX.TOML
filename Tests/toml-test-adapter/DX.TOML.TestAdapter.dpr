@@ -209,12 +209,53 @@ class function TTomlTestAdapter.ConvertTomlToJson(const AToml: string): string;
 var
   LTable: TToml;
   LJson: TJSONObject;
+  LJsonStr: string;
+  i: Integer;
+  LInString: Boolean;
+  LChar: Char;
 begin
   LTable := TToml.FromString(AToml);
   try
     LJson := TomlTableToJson(LTable);
     try
-      Result := LJson.ToString;
+      LJsonStr := LJson.ToString;
+
+      // Post-process to escape null bytes and other control characters
+      // that Delphi's JSON library doesn't handle correctly
+      Result := '';
+      LInString := False;
+      i := 1;
+      while i <= Length(LJsonStr) do
+      begin
+        LChar := LJsonStr[i];
+
+        // Track if we're inside a JSON string
+        if (LChar = '"') and ((i = 1) or (LJsonStr[i-1] <> '\')) then
+          LInString := not LInString;
+
+        // Escape control characters in strings
+        if LInString then
+        begin
+          case LChar of
+            #0:  begin Result := Result + '\u0000'; Inc(i); Continue; end;
+            #1..#7, #11, #14..#31:
+              begin
+                Result := Result + Format('\u%4.4x', [Ord(LChar)]);
+                Inc(i);
+                Continue;
+              end;
+            #127:
+              begin
+                Result := Result + '\u007f';
+                Inc(i);
+                Continue;
+              end;
+          end;
+        end;
+
+        Result := Result + LChar;
+        Inc(i);
+      end;
     finally
       LJson.Free;
     end;
