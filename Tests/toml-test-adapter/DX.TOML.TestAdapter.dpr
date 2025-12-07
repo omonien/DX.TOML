@@ -93,19 +93,27 @@ begin
           LValue := AValue.RawText;
 
           // Determine type based on format
-          if (Pos('-', LValue) = 0) and (Pos('T', UpperCase(LValue)) = 0) then
+          var LHasTimeSeparator := (Pos('T', UpperCase(LValue)) > 0) or (Pos(' ', LValue) > 0);
+          var LHasDash := Pos('-', LValue) > 0;
+
+          // Normalize datetime format: replace space with 'T', and normalize to uppercase T and Z
+          var LNormalizedValue := StringReplace(LValue, ' ', 'T', [rfReplaceAll]);
+          LNormalizedValue := StringReplace(LNormalizedValue, 't', 'T', [rfReplaceAll]);
+          LNormalizedValue := StringReplace(LNormalizedValue, 'z', 'Z', [rfReplaceAll]);
+
+          if (not LHasDash) and (not LHasTimeSeparator) then
           begin
             // Time only: 07:32:00
             LResult.AddPair('type', 'time-local');
           end
-          else if Pos('T', UpperCase(LValue)) = 0 then
+          else if not LHasTimeSeparator then
           begin
             // Date only: 1979-05-27
             LResult.AddPair('type', 'date-local');
           end
-          else if (Pos('Z', UpperCase(LValue)) > 0) or
-                  (Pos('+', Copy(LValue, 11, Length(LValue))) > 0) or
-                  (Pos('-', Copy(LValue, 11, Length(LValue))) > 0) then
+          else if (Pos('Z', UpperCase(LNormalizedValue)) > 0) or
+                  (Pos('+', Copy(LNormalizedValue, 11, Length(LNormalizedValue))) > 0) or
+                  (Pos('-', Copy(LNormalizedValue, 11, Length(LNormalizedValue))) > 0) then
           begin
             // DateTime with timezone
             LResult.AddPair('type', 'datetime');
@@ -116,7 +124,7 @@ begin
             LResult.AddPair('type', 'datetime-local');
           end;
 
-          LResult.AddPair('value', LValue);
+          LResult.AddPair('value', LNormalizedValue);
         end;
 
       tvkArray:

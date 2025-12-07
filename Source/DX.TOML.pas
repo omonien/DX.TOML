@@ -992,8 +992,10 @@ begin
           Advance;
         end;
 
-        // Check for time part (T07:32:00)
-        if GetCurrentChar = 'T' then
+        // Check for time part (T07:32:00 or space separator: 1987-07-05 17:45:00)
+        // For space separator, verify next char is a digit
+        if CharInSet(GetCurrentChar, ['T', 't']) or
+           ((GetCurrentChar = ' ') and IsDigit(GetLookahead(1))) then
         begin
           LKind := tkDateTime;
           LText := LText + GetCurrentChar;
@@ -1006,8 +1008,8 @@ begin
             Advance;
           end;
 
-          // Check for timezone (Z or +/-HH:MM)
-          if GetCurrentChar = 'Z' then
+          // Check for timezone (Z/z or +/-HH:MM)
+          if CharInSet(GetCurrentChar, ['Z', 'z']) then
           begin
             LText := LText + GetCurrentChar;
             Advance;
