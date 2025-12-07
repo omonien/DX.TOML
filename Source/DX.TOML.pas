@@ -753,10 +753,14 @@ var
   LText: string;
   LEscaped: Boolean;
   LClosed: Boolean;
+  LIsLiteral: Boolean;
 begin
   LStart := CreatePosition;
   LText := '';
   LClosed := False;
+
+  // Literal strings (single quotes) don't process escape sequences
+  LIsLiteral := (ADelimiter = '''');
 
   // Skip opening delimiter
   LText := LText + GetCurrentChar;
@@ -771,8 +775,9 @@ begin
       Advance;
       LEscaped := False;
     end
-    else if GetCurrentChar = '\' then
+    else if (not LIsLiteral) and (GetCurrentChar = '\') then
     begin
+      // Only treat backslash as escape in double-quoted strings
       LText := LText + GetCurrentChar;
       Advance;
       LEscaped := True;
@@ -933,16 +938,47 @@ begin
     end;
 
     // Check for float
+    // But don't consume dot if this looks like a dotted key (e.g., "1.2 = 3")
     if GetCurrentChar = '.' then
     begin
-      LKind := tkFloat;
-      LText := LText + GetCurrentChar;
-      Advance;
+      // Look ahead to see if this is a dotted key or a float
+      // Dotted key pattern: digit+ '.' digit+ whitespace* '='
+      // Float pattern: digit+ '.' digit+ (not followed by '=')
+      var LSavedPos := FPosition;
+      var LSavedLine := FLine;
+      var LSavedColumn := FColumn;
+      var LIsDottedKey := False;
 
+      // Tentatively consume the dot and digits
+      Advance; // skip dot
       while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar = '_')) do
+        Advance;
+
+      // Skip whitespace
+      while not IsEof and CharInSet(GetCurrentChar, [' ', #9]) do
+        Advance;
+
+      // Check if we see '=' (dotted key) or something else (float)
+      if GetCurrentChar = '=' then
+        LIsDottedKey := True;
+
+      // Restore position
+      FPosition := LSavedPos;
+      FLine := LSavedLine;
+      FColumn := LSavedColumn;
+
+      // If not a dotted key, consume as float
+      if not LIsDottedKey then
       begin
+        LKind := tkFloat;
         LText := LText + GetCurrentChar;
         Advance;
+
+        while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar = '_')) do
+        begin
+          LText := LText + GetCurrentChar;
+          Advance;
+        end;
       end;
     end;
 
