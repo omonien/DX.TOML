@@ -864,6 +864,28 @@ begin
   begin
     LText := LText + GetCurrentChar;
     Advance;
+
+    // Check for special float values (inf, nan) after sign
+    if (GetCurrentChar = 'i') and (GetLookahead(1) = 'n') and (GetLookahead(2) = 'f') then
+    begin
+      LText := LText + 'inf';
+      Advance;
+      Advance;
+      Advance;
+      LKind := tkFloat;
+      FTokens.Add(TTomlToken.Create(LKind, LText, LStart));
+      Exit;
+    end
+    else if (GetCurrentChar = 'n') and (GetLookahead(1) = 'a') and (GetLookahead(2) = 'n') then
+    begin
+      LText := LText + 'nan';
+      Advance;
+      Advance;
+      Advance;
+      LKind := tkFloat;
+      FTokens.Add(TTomlToken.Create(LKind, LText, LStart));
+      Exit;
+    end;
   end;
 
   // Handle special prefixes (0x, 0o, 0b)
@@ -1586,6 +1608,64 @@ begin
           '"': Result := Result + '"';
           '''': Result := Result + '''';
           '/': Result := Result + '/';
+          'u':
+            begin
+              // \uXXXX - 4 hex digits for Unicode code point
+              if i + 4 <= Length(AText) then
+              begin
+                var LHex := Copy(AText, i + 1, 4);
+                var LCodePoint: Integer;
+                if TryStrToInt('$' + LHex, LCodePoint) then
+                begin
+                  Result := Result + Char(LCodePoint);
+                  Inc(i, 4);  // Skip the 4 hex digits
+                end
+                else
+                  raise ETomlParserException.Create(
+                    Format('Invalid Unicode escape sequence: \u%s', [LHex]),
+                    TTomlPosition.Create(1, 1, 0));
+              end
+              else
+                raise ETomlParserException.Create(
+                  'Incomplete Unicode escape sequence: \u requires 4 hex digits',
+                  TTomlPosition.Create(1, 1, 0));
+            end;
+          'U':
+            begin
+              // \UXXXXXXXX - 8 hex digits for Unicode code point
+              if i + 8 <= Length(AText) then
+              begin
+                var LHex := Copy(AText, i + 1, 8);
+                var LCodePoint: Integer;
+                if TryStrToInt('$' + LHex, LCodePoint) then
+                begin
+                  // Convert code point to UTF-16 surrogate pair if needed
+                  if LCodePoint <= $FFFF then
+                    Result := Result + Char(LCodePoint)
+                  else if LCodePoint <= $10FFFF then
+                  begin
+                    // Convert to UTF-16 surrogate pair
+                    LCodePoint := LCodePoint - $10000;
+                    var LHigh := $D800 + (LCodePoint shr 10);
+                    var LLow := $DC00 + (LCodePoint and $3FF);
+                    Result := Result + Char(LHigh) + Char(LLow);
+                  end
+                  else
+                    raise ETomlParserException.Create(
+                      Format('Invalid Unicode code point: \U%s', [LHex]),
+                      TTomlPosition.Create(1, 1, 0));
+                  Inc(i, 8);  // Skip the 8 hex digits
+                end
+                else
+                  raise ETomlParserException.Create(
+                    Format('Invalid Unicode escape sequence: \U%s', [LHex]),
+                    TTomlPosition.Create(1, 1, 0));
+              end
+              else
+                raise ETomlParserException.Create(
+                  'Incomplete Unicode escape sequence: \U requires 8 hex digits',
+                  TTomlPosition.Create(1, 1, 0));
+            end;
         else
           raise ETomlParserException.Create(
             Format('Invalid escape sequence: \%s', [AText[i]]),
