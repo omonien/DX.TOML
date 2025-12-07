@@ -131,6 +131,13 @@ type
     procedure TestInvalidInlineTable;
   end;
 
+  [TestFixture]
+  TTomlLocaleTests = class
+  public
+    [Test]
+    procedure TestFloatParsingLocaleIndependent;
+  end;
+
 implementation
 
 { TTomlLexerTests }
@@ -648,6 +655,48 @@ begin
   // Newline in inline table (not allowed)
   Assert.IsFalse(TToml.Validate('point = { x = 1,' + sLineBreak + 'y = 2 }', LError),
     'Should reject inline table with newline');
+end;
+
+{ TTomlLocaleTests }
+
+procedure TTomlLocaleTests.TestFloatParsingLocaleIndependent;
+var
+  LToml: string;
+  LTable: TToml;
+  LValue: Double;
+begin
+  // Test that floats are parsed correctly regardless of system locale
+  // TOML always uses dot as decimal separator
+  LToml := 'pi = 3.14159' + sLineBreak +
+           'e = 2.71828' + sLineBreak +
+           'negative = -123.456' + sLineBreak +
+           'positive = +0.5' + sLineBreak +
+           'with_exp = 1.5e10' + sLineBreak +
+           'with_underscore = 1_234.567_89';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('pi'), 'Should have pi key');
+    LValue := LTable['pi'].AsFloat;
+    Assert.AreEqual(3.14159, LValue, 0.00001, 'Pi should be parsed correctly');
+
+    LValue := LTable['e'].AsFloat;
+    Assert.AreEqual(2.71828, LValue, 0.00001, 'e should be parsed correctly');
+
+    LValue := LTable['negative'].AsFloat;
+    Assert.AreEqual(-123.456, LValue, 0.001, 'Negative float should be parsed correctly');
+
+    LValue := LTable['positive'].AsFloat;
+    Assert.AreEqual(0.5, LValue, 0.001, 'Positive float with sign should be parsed correctly');
+
+    LValue := LTable['with_exp'].AsFloat;
+    Assert.AreEqual(1.5e10, LValue, 1e6, 'Float with exponent should be parsed correctly');
+
+    LValue := LTable['with_underscore'].AsFloat;
+    Assert.AreEqual(1234.56789, LValue, 0.00001, 'Float with underscores should be parsed correctly');
+  finally
+    LTable.Free;
+  end;
 end;
 
 end.
