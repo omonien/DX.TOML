@@ -967,7 +967,8 @@ begin
     end;
 
     // Check for date/time formats (YYYY-MM-DD or HH:MM:SS)
-    if GetCurrentChar = '-' then
+    // Only treat as date if next char after '-' is a digit (not a letter like in "2000-datetime")
+    if (GetCurrentChar = '-') and IsDigit(GetLookahead(1)) then
     begin
       // Might be a date (1979-05-27) or datetime (1979-05-27T07:32:00)
       LText := LText + GetCurrentChar;
@@ -1048,19 +1049,35 @@ begin
       end;
     end;
 
-    // Check for leading zeros (not allowed in TOML integers)
-    // Only check for integer/float types, not for date/time
-    if (LKind in [tkInteger, tkFloat]) then
+    // Check if this is actually part of a bareword key (e.g., "2000-datetime")
+    // If we see "-" followed by a letter or underscore, treat as bareword
+    if (LKind in [tkInteger, tkFloat]) and (GetCurrentChar = '-') and
+       (not IsEof) and CharInSet(GetLookahead(1), ['a'..'z', 'A'..'Z', '_']) then
     begin
-      // Remove sign for checking
-      LCheckText := LText;
-      if (Length(LCheckText) > 0) and CharInSet(LCheckText[1], ['+', '-']) then
-        Delete(LCheckText, 1, 1);
+      // Continue reading as bareword
+      while not IsEof and IsBareKeyChar(GetCurrentChar) do
+      begin
+        LText := LText + GetCurrentChar;
+        Advance;
+      end;
+      LKind := tkBareKey;
+    end
+    else
+    begin
+      // Check for leading zeros (not allowed in TOML integers)
+      // Only check for integer/float types, not for date/time
+      if (LKind in [tkInteger, tkFloat]) then
+      begin
+        // Remove sign for checking
+        LCheckText := LText;
+        if (Length(LCheckText) > 0) and CharInSet(LCheckText[1], ['+', '-']) then
+          Delete(LCheckText, 1, 1);
 
-      // Check for leading zero (but allow 0.x and 0ex for floats)
-      if (Length(LCheckText) > 1) and (LCheckText[1] = '0') and
-         not CharInSet(LCheckText[2], ['.', 'e', 'E']) then
-        raise Exception.Create('Leading zeros are not allowed');
+        // Check for leading zero (but allow 0.x and 0ex for floats)
+        if (Length(LCheckText) > 1) and (LCheckText[1] = '0') and
+           not CharInSet(LCheckText[2], ['.', 'e', 'E']) then
+          raise Exception.Create('Leading zeros are not allowed');
+      end;
     end;
   end;
 
