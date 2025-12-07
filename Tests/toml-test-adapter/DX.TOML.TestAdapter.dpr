@@ -59,7 +59,10 @@ begin
       tvkFloat:
         begin
           LResult.AddPair('type', 'float');
-          LValue := AValue.AsFloat.ToString;
+          // Use invariant culture (dot as decimal separator)
+          var LFormatSettings := TFormatSettings.Create('en-US');
+          LFormatSettings.DecimalSeparator := '.';
+          LValue := FloatToStr(AValue.AsFloat, LFormatSettings);
           // Handle special float values
           if SameText(LValue, 'INF') or SameText(LValue, 'Infinity') then
             LValue := 'inf'

@@ -2299,6 +2299,7 @@ end;
 class function TTomlDomBuilder.ParseFloat(const AText: string): Double;
 var
   LClean: string;
+  LFormatSettings: TFormatSettings;
 begin
   LClean := AText.Replace('_', '', [rfReplaceAll]);
 
@@ -2315,7 +2316,12 @@ begin
   else if LClean = '-nan' then
     Result := NaN
   else
-    Result := StrToFloat(LClean);
+  begin
+    // Use invariant culture settings (dot as decimal separator)
+    LFormatSettings := TFormatSettings.Create('en-US');
+    LFormatSettings.DecimalSeparator := '.';
+    Result := StrToFloat(LClean, LFormatSettings);
+  end;
 end;
 
 class function TTomlDomBuilder.ParseDateTime(const AText: string): TDateTime;
