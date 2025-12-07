@@ -1757,9 +1757,45 @@ begin
                   'Incomplete Unicode escape sequence: \U requires 8 hex digits',
                   TTomlPosition.Create(1, 1, 0));
             end;
+          ' ', #9:
+            begin
+              // Whitespace after backslash - check if line-ending backslash
+              if LIsMultiline then
+              begin
+                // Skip trailing whitespace on the current line
+                var j := i;
+                while (j <= Length(AText)) and CharInSet(AText[j], [' ', #9]) do
+                  Inc(j);
+
+                // Check if followed by newline
+                if (j <= Length(AText)) and CharInSet(AText[j], [#10, #13]) then
+                begin
+                  // Line-ending backslash - skip whitespace and newline
+                  i := j - 1;  // Will be incremented at end of loop
+                  Inc(i);  // Move to newline character
+
+                  // Skip CRLF or LF
+                  if (AText[i] = #13) and (i + 1 <= Length(AText)) and (AText[i + 1] = #10) then
+                    Inc(i);  // Skip LF after CR
+
+                  // Skip any whitespace at the beginning of the next line
+                  while (i + 1 <= Length(AText)) and CharInSet(AText[i + 1], [' ', #9, #10, #13]) do
+                    Inc(i);
+                end
+                else
+                  // Not a line-ending backslash
+                  raise ETomlParserException.Create(
+                    Format('Invalid escape sequence: \%s', [AText[i]]),
+                    TTomlPosition.Create(1, 1, 0));
+              end
+              else
+                raise ETomlParserException.Create(
+                  Format('Invalid escape sequence: \%s', [AText[i]]),
+                  TTomlPosition.Create(1, 1, 0));
+            end;
           #10, #13:
             begin
-              // Line-ending backslash in multiline strings
+              // Line-ending backslash in multiline strings (no trailing whitespace)
               // Skip the newline and any following whitespace
               if LIsMultiline then
               begin
