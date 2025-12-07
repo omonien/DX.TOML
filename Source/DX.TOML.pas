@@ -41,7 +41,9 @@ uses
   System.Character,
   System.Rtti,
   System.DateUtils,
-  System.IOUtils;
+  System.IOUtils,
+  System.TypInfo,
+  System.Math;
 
 type
   {$REGION 'Forward Declarations'}
@@ -755,9 +757,11 @@ var
   LStart: TTomlPosition;
   LText: string;
   LEscaped: Boolean;
+  LClosed: Boolean;
 begin
   LStart := CreatePosition;
   LText := '';
+  LClosed := False;
 
   // Skip opening delimiter
   LText := LText + GetCurrentChar;
@@ -782,6 +786,7 @@ begin
     begin
       LText := LText + GetCurrentChar;
       Advance;
+      LClosed := True;
       Break;
     end
     else
@@ -790,6 +795,10 @@ begin
       Advance;
     end;
   end;
+
+  // Check if string was properly closed
+  if not LClosed then
+    raise Exception.Create('Unclosed string');
 
   FTokens.Add(TTomlToken.Create(tkString, LText, LStart));
 end;
@@ -846,7 +855,10 @@ procedure TTomlLexer.ScanNumber;
 var
   LStart: TTomlPosition;
   LText: string;
+  LCheckText: string;
   LKind: TTomlTokenKind;
+  LPrefix: Char;
+  i: Integer;
 begin
   LStart := CreatePosition;
   LText := '';
@@ -862,6 +874,7 @@ begin
   // Handle special prefixes (0x, 0o, 0b)
   if (GetCurrentChar = '0') and (GetLookahead(1) in ['x', 'o', 'b']) then
   begin
+    LPrefix := GetLookahead(1);
     LText := LText + GetCurrentChar;
     Advance;
     LText := LText + GetCurrentChar;
@@ -872,6 +885,25 @@ begin
     begin
       LText := LText + GetCurrentChar;
       Advance;
+    end;
+
+    // Validate hex/octal/binary digits
+    for i := 3 to Length(LText) do
+    begin
+      if LText[i] = '_' then
+        Continue;
+
+      case LPrefix of
+        'x': // Hex: 0-9, A-F, a-f
+          if not (LText[i] in ['0'..'9', 'A'..'F', 'a'..'f']) then
+            raise Exception.Create(Format('Invalid hex digit: %s', [LText[i]]));
+        'o': // Octal: 0-7
+          if not (LText[i] in ['0'..'7']) then
+            raise Exception.Create(Format('Invalid octal digit: %s', [LText[i]]));
+        'b': // Binary: 0-1
+          if not (LText[i] in ['0'..'1']) then
+            raise Exception.Create(Format('Invalid binary digit: %s', [LText[i]]));
+      end;
     end;
   end
   else
@@ -915,6 +947,100 @@ begin
         LText := LText + GetCurrentChar;
         Advance;
       end;
+    end;
+
+    // Check for date/time formats (YYYY-MM-DD or HH:MM:SS)
+    if GetCurrentChar = '-' then
+    begin
+      // Might be a date (1979-05-27) or datetime (1979-05-27T07:32:00)
+      LText := LText + GetCurrentChar;
+      Advance;
+
+      // Read MM
+      while not IsEof and IsDigit(GetCurrentChar) do
+      begin
+        LText := LText + GetCurrentChar;
+        Advance;
+      end;
+
+      if GetCurrentChar = '-' then
+      begin
+        LText := LText + GetCurrentChar;
+        Advance;
+
+        // Read DD
+        while not IsEof and IsDigit(GetCurrentChar) do
+        begin
+          LText := LText + GetCurrentChar;
+          Advance;
+        end;
+
+        // Check for time part (T07:32:00)
+        if GetCurrentChar = 'T' then
+        begin
+          LKind := tkDateTime;
+          LText := LText + GetCurrentChar;
+          Advance;
+
+          // Read time part (HH:MM:SS)
+          while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar in [':', '.'])) do
+          begin
+            LText := LText + GetCurrentChar;
+            Advance;
+          end;
+
+          // Check for timezone (Z or +/-HH:MM)
+          if GetCurrentChar = 'Z' then
+          begin
+            LText := LText + GetCurrentChar;
+            Advance;
+          end
+          else if GetCurrentChar in ['+', '-'] then
+          begin
+            LText := LText + GetCurrentChar;
+            Advance;
+
+            // Read timezone offset (HH:MM)
+            while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar = ':')) do
+            begin
+              LText := LText + GetCurrentChar;
+              Advance;
+            end;
+          end;
+        end
+        else
+        begin
+          LKind := tkDate;
+        end;
+      end;
+    end
+    else if GetCurrentChar = ':' then
+    begin
+      // Time format (07:32:00)
+      LKind := tkTime;
+      LText := LText + GetCurrentChar;
+      Advance;
+
+      // Read rest of time
+      while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar in [':', '.'])) do
+      begin
+        LText := LText + GetCurrentChar;
+        Advance;
+      end;
+    end;
+
+    // Check for leading zeros (not allowed in TOML integers)
+    // Only check for integer/float types, not for date/time
+    if (LKind in [tkInteger, tkFloat]) then
+    begin
+      // Remove sign for checking
+      LCheckText := LText;
+      if (Length(LCheckText) > 0) and (LCheckText[1] in ['+', '-']) then
+        Delete(LCheckText, 1, 1);
+
+      // Check for leading zero
+      if (Length(LCheckText) > 1) and (LCheckText[1] = '0') and (LCheckText[2] <> '.') then
+        raise Exception.Create('Leading zeros are not allowed');
     end;
   end;
 
@@ -1368,8 +1494,7 @@ end;
 
 destructor TTomlParser.Destroy;
 begin
-  if Assigned(FDocument) then
-    FDocument.Free;
+  // Note: FDocument is not freed here because ownership is transferred to caller
   inherited;
 end;
 
@@ -1394,7 +1519,8 @@ end;
 
 function TTomlParser.IsEof: Boolean;
 begin
-  Result := (FPosition >= FTokens.Count) or (GetCurrentToken.Kind = tkEof);
+  Result := (FPosition >= FTokens.Count) or
+            ((FPosition < FTokens.Count) and (FTokens[FPosition].Kind = tkEof));
 end;
 
 procedure TTomlParser.Advance;
@@ -1425,8 +1551,17 @@ begin
 end;
 
 procedure TTomlParser.Error(const AMessage: string);
+var
+  LPos: TTomlPosition;
 begin
-  raise ETomlParserException.Create(AMessage, GetCurrentToken.Position);
+  if not IsEof and (FPosition < FTokens.Count) then
+    LPos := FTokens[FPosition].Position
+  else if FTokens.Count > 0 then
+    LPos := FTokens[FTokens.Count - 1].Position
+  else
+    LPos := TTomlPosition.Create(1, 1, 0);
+
+  raise ETomlParserException.Create(AMessage, LPos);
 end;
 
 function TTomlParser.ParseString(const AText: string): string;
@@ -1461,11 +1596,16 @@ begin
           'n': Result := Result + #10;
           'r': Result := Result + #13;
           't': Result := Result + #9;
+          'b': Result := Result + #8;
+          'f': Result := Result + #12;
           '\': Result := Result + '\';
           '"': Result := Result + '"';
           '''': Result := Result + '''';
+          '/': Result := Result + '/';
         else
-          Result := Result + AText[i];
+          raise ETomlParserException.Create(
+            Format('Invalid escape sequence: \%s', [AText[i]]),
+            TTomlPosition.Create(1, 1, 0));
         end;
       end;
     end
@@ -2015,12 +2155,19 @@ end;
 class function TToml.Validate(const ASource: string; out AErrorMessage: string): Boolean;
 var
   LDocument: TTomlDocumentSyntax;
+  LTable: TToml;
 begin
   try
     LDocument := InternalParse(ASource);
     try
-      Result := True;
-      AErrorMessage := '';
+      // Build DOM to trigger validation checks (duplicate keys, mixed arrays, etc.)
+      LTable := TTomlDomBuilder.BuildFromDocument(LDocument);
+      try
+        Result := True;
+        AErrorMessage := '';
+      finally
+        LTable.Free;
+      end;
     finally
       LDocument.Free;
     end;
@@ -2219,6 +2366,12 @@ begin
     LMin := StrToInt(Copy(LTimePart, 4, 2));
     LSec := StrToInt(Copy(LTimePart, 7, 2));
 
+    // Validate time values
+    if (LHour > 23) or (LMin > 59) or (LSec > 59) then
+      raise ETomlParserException.Create(
+        'Invalid time value',
+        TTomlPosition.Create(1, 1, 0));
+
     Result := EncodeTime(LHour, LMin, LSec, 0);
     Exit;
   end;
@@ -2234,6 +2387,12 @@ begin
     LMonth := StrToInt(Copy(LDatePart, 6, 2));
     LDay := StrToInt(Copy(LDatePart, 9, 2));
 
+    // Validate date values
+    if (LMonth < 1) or (LMonth > 12) or (LDay < 1) or (LDay > 31) then
+      raise ETomlParserException.Create(
+        'Invalid date value',
+        TTomlPosition.Create(1, 1, 0));
+
     Result := EncodeDate(LYear, LMonth, LDay);
     Exit;
   end;
@@ -2246,6 +2405,13 @@ begin
   LYear := StrToInt(Copy(LDatePart, 1, 4));
   LMonth := StrToInt(Copy(LDatePart, 6, 2));
   LDay := StrToInt(Copy(LDatePart, 9, 2));
+
+  // Validate date values
+  if (LMonth < 1) or (LMonth > 12) or (LDay < 1) or (LDay > 31) then
+    raise ETomlParserException.Create(
+      'Invalid date value',
+      TTomlPosition.Create(1, 1, 0));
+
   LDate := EncodeDate(LYear, LMonth, LDay);
 
   // Check for timezone offset
@@ -2333,11 +2499,54 @@ class function TTomlDomBuilder.ConvertArray(ANode: TTomlArraySyntax): TTomlArray
 var
   LArray: TTomlArray;
   LElement: TTomlSyntaxNode;
+  LValue: TTomlValue;
+  LFirstKind: TTomlValueKind;
+  LFirstArray: TTomlArray;
+  LFirstArrayElementKind: TTomlValueKind;
+  i: Integer;
 begin
   LArray := TTomlArray.Create;
+  LFirstKind := tvkString;  // Initialize with dummy value
+  LFirstArray := nil;
 
   for LElement in ANode.Elements do
-    LArray.Add(ConvertValue(LElement));
+  begin
+    LValue := ConvertValue(LElement);
+
+    // Check type consistency (first element sets the type)
+    if LArray.Count = 0 then
+    begin
+      LFirstKind := LValue.Kind;
+      // If first element is array, remember its element type
+      if (LValue.Kind = tvkArray) and (LValue.AsArray.Count > 0) then
+      begin
+        LFirstArray := LValue.AsArray;
+        LFirstArrayElementKind := LFirstArray[0].Kind;
+      end;
+    end
+    else
+    begin
+      // Check kind matches
+      if LValue.Kind <> LFirstKind then
+        raise ETomlParserException.Create(
+          'Mixed types in array are not allowed',
+          TTomlPosition.Create(1, 1, 0));
+
+      // If both are arrays, check their element types match
+      if (LValue.Kind = tvkArray) and (LFirstArray <> nil) then
+      begin
+        if LValue.AsArray.Count > 0 then
+        begin
+          if LValue.AsArray[0].Kind <> LFirstArrayElementKind then
+            raise ETomlParserException.Create(
+              'Mixed types in array are not allowed',
+              TTomlPosition.Create(1, 1, 0));
+        end;
+      end;
+    end;
+
+    LArray.Add(LValue);
+  end;
 
   Result := LArray;
 end;
@@ -2376,6 +2585,13 @@ begin
 
   // Set the final value
   LKey := AKeyValue.Key.Segments[AKeyValue.Key.Segments.Count - 1];
+
+  // Check for duplicate key
+  if LCurrentTable.ContainsKey(LKey) then
+    raise ETomlParserException.Create(
+      Format('Duplicate key "%s"', [LKey]),
+      TTomlPosition.Create(1, 1, 0));
+
   LValue := ConvertValue(AKeyValue.Value);
   LCurrentTable.SetValue(LKey, LValue);
 end;
@@ -2388,42 +2604,57 @@ var
   LTableSyntax: TTomlTableSyntax;
   LCurrentTable: TToml;
   LKey: string;
+  LFullTableName: string;
   i: Integer;
+  LDefinedTables: TList<string>;
 begin
   LTable := TToml.Create;
-
-  // Process top-level key-values
-  for LKeyValue in ADocument.KeyValues do
-  begin
-    if LKeyValue is TTomlKeyValueSyntax then
-      ApplyKeyValue(LTable, TTomlKeyValueSyntax(LKeyValue));
-  end;
-
-  // Process tables
-  for LTableNode in ADocument.Tables do
-  begin
-    if LTableNode is TTomlTableSyntax then
+  LDefinedTables := TList<string>.Create;
+  try
+    // Process top-level key-values
+    for LKeyValue in ADocument.KeyValues do
     begin
-      LTableSyntax := TTomlTableSyntax(LTableNode);
-      LCurrentTable := LTable;
+      if LKeyValue is TTomlKeyValueSyntax then
+        ApplyKeyValue(LTable, TTomlKeyValueSyntax(LKeyValue));
+    end;
 
-      // Navigate to the correct nested table
-      for i := 0 to LTableSyntax.Key.Segments.Count - 1 do
+    // Process tables
+    for LTableNode in ADocument.Tables do
+    begin
+      if LTableNode is TTomlTableSyntax then
       begin
-        LKey := LTableSyntax.Key.Segments[i];
-        LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
-      end;
+        LTableSyntax := TTomlTableSyntax(LTableNode);
+        LFullTableName := LTableSyntax.Key.GetFullKey;
 
-      // Add key-values to this table
-      for LKeyValue in LTableSyntax.KeyValues do
-      begin
-        if LKeyValue is TTomlKeyValueSyntax then
-          ApplyKeyValue(LCurrentTable, TTomlKeyValueSyntax(LKeyValue));
+        // Check if table was already defined
+        if LDefinedTables.Contains(LFullTableName) then
+          raise ETomlParserException.Create(
+            Format('Table [%s] is already defined', [LFullTableName]),
+            TTomlPosition.Create(1, 1, 0));
+
+        LDefinedTables.Add(LFullTableName);
+        LCurrentTable := LTable;
+
+        // Navigate to the correct nested table
+        for i := 0 to LTableSyntax.Key.Segments.Count - 1 do
+        begin
+          LKey := LTableSyntax.Key.Segments[i];
+          LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+        end;
+
+        // Add key-values to this table
+        for LKeyValue in LTableSyntax.KeyValues do
+        begin
+          if LKeyValue is TTomlKeyValueSyntax then
+            ApplyKeyValue(LCurrentTable, TTomlKeyValueSyntax(LKeyValue));
+        end;
       end;
     end;
-  end;
 
-  Result := LTable;
+    Result := LTable;
+  finally
+    LDefinedTables.Free;
+  end;
 end;
 
 { TTomlSerializer }
