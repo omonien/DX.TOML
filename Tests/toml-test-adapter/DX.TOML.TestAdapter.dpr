@@ -28,6 +28,7 @@ type
   TTomlTestAdapter = class
   private
     class function TomlValueToJson(AValue: TTomlValue): TJSONObject;
+    class function TomlValueToJsonValue(AValue: TTomlValue): TJSONValue;
     class function TomlArrayToJson(AArray: TTomlArray): TJSONArray;
     class function TomlTableToJson(ATable: TToml): TJSONObject;
   public
@@ -84,10 +85,37 @@ begin
 
       tvkDateTime:
         begin
-          // toml-test expects RFC 3339 format
-          // For now, use ISO 8601 format (close enough for testing)
-          LResult.AddPair('type', 'datetime');
-          LValue := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', AValue.AsDateTime);
+          // toml-test expects different types based on RFC 3339 format:
+          // - datetime: with timezone (Z or +/-HH:MM)
+          // - datetime-local: date and time without timezone
+          // - date-local: date only
+          // - time-local: time only
+          LValue := AValue.RawText;
+
+          // Determine type based on format
+          if (Pos('-', LValue) = 0) and (Pos('T', UpperCase(LValue)) = 0) then
+          begin
+            // Time only: 07:32:00
+            LResult.AddPair('type', 'time-local');
+          end
+          else if Pos('T', UpperCase(LValue)) = 0 then
+          begin
+            // Date only: 1979-05-27
+            LResult.AddPair('type', 'date-local');
+          end
+          else if (Pos('Z', UpperCase(LValue)) > 0) or
+                  (Pos('+', Copy(LValue, 11, Length(LValue))) > 0) or
+                  (Pos('-', Copy(LValue, 11, Length(LValue))) > 0) then
+          begin
+            // DateTime with timezone
+            LResult.AddPair('type', 'datetime');
+          end
+          else
+          begin
+            // DateTime without timezone
+            LResult.AddPair('type', 'datetime-local');
+          end;
+
           LResult.AddPair('value', LValue);
         end;
 
@@ -112,6 +140,21 @@ begin
   end;
 end;
 
+class function TTomlTestAdapter.TomlValueToJsonValue(AValue: TTomlValue): TJSONValue;
+begin
+  // Convert TOML value to JSON value
+  // Arrays and Tables are returned as JSON arrays/objects directly
+  // Other types are wrapped in {"type": "...", "value": "..."}
+  case AValue.Kind of
+    tvkArray:
+      Result := TomlArrayToJson(AValue.AsArray);
+    tvkTable:
+      Result := TomlTableToJson(AValue.AsTable);
+  else
+    Result := TomlValueToJson(AValue);
+  end;
+end;
+
 class function TTomlTestAdapter.TomlArrayToJson(AArray: TTomlArray): TJSONArray;
 var
   LResult: TJSONArray;
@@ -120,7 +163,10 @@ begin
   LResult := TJSONArray.Create;
   try
     for I := 0 to AArray.Count - 1 do
-      LResult.AddElement(TomlValueToJson(AArray[I]));
+    begin
+      // Use TomlValueToJsonValue so nested arrays are also unwrapped
+      LResult.AddElement(TomlValueToJsonValue(AArray[I]));
+    end;
 
     Result := LResult;
   except
@@ -140,7 +186,8 @@ begin
     for LKey in ATable.Keys do
     begin
       LValue := ATable[LKey];
-      LResult.AddPair(LKey, TomlValueToJson(LValue));
+      // Use TomlValueToJsonValue which handles arrays and tables specially
+      LResult.AddPair(LKey, TomlValueToJsonValue(LValue));
     end;
 
     Result := LResult;

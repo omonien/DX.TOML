@@ -404,6 +404,7 @@ type
     FValue: TValue;
     FTable: TToml;
     FArray: TTomlArray;
+    FRawText: string;  // For DateTime: preserve original RFC 3339 format
 
     function GetAsString: string;
     function GetAsInteger: Int64;
@@ -417,7 +418,7 @@ type
     constructor CreateInteger(AValue: Int64);
     constructor CreateFloat(AValue: Double);
     constructor CreateBoolean(AValue: Boolean);
-    constructor CreateDateTime(AValue: TDateTime);
+    constructor CreateDateTime(AValue: TDateTime; const ARawText: string = '');
     constructor CreateTable(ATable: TToml);
     constructor CreateArray(AArray: TTomlArray);
     destructor Destroy; override;
@@ -433,6 +434,7 @@ type
     property AsDateTime: TDateTime read GetAsDateTime;
     property AsTable: TToml read GetAsTable;
     property AsArray: TTomlArray read GetAsArray;
+    property RawText: string read FRawText;  // Original text (for DateTime RFC 3339 format)
   end;
 
   /// <summary>TOML array (list of values)</summary>
@@ -1935,11 +1937,12 @@ begin
   FValue := AValue;
 end;
 
-constructor TTomlValue.CreateDateTime(AValue: TDateTime);
+constructor TTomlValue.CreateDateTime(AValue: TDateTime; const ARawText: string = '');
 begin
   inherited Create;
   FKind := tvkDateTime;
   FValue := AValue;
+  FRawText := ARawText;  // Preserve original RFC 3339 format
 end;
 
 constructor TTomlValue.CreateTable(ATable: TToml);
@@ -2451,7 +2454,10 @@ begin
         Result := TTomlValue.CreateBoolean(LValueNode.Value = 'true');
 
       tkDateTime, tkDate, tkTime:
-        Result := TTomlValue.CreateDateTime(ParseDateTime(LValueNode.Value))
+        Result := TTomlValue.CreateDateTime(
+          ParseDateTime(LValueNode.Value),
+          LValueNode.Value  // Preserve original RFC 3339 format
+        )
     else
       Result := TTomlValue.CreateString(LValueNode.Value);
     end;
@@ -2475,51 +2481,14 @@ var
   LArray: TTomlArray;
   LElement: TTomlSyntaxNode;
   LValue: TTomlValue;
-  LFirstKind: TTomlValueKind;
-  LFirstArray: TTomlArray;
-  LFirstArrayElementKind: TTomlValueKind;
 begin
   LArray := TTomlArray.Create;
-  LFirstKind := tvkString;  // Initialize with dummy value
-  LFirstArray := nil;
-  LFirstArrayElementKind := tvkString;  // Initialize with dummy value
 
+  // TOML 1.0 allows heterogeneous arrays
+  // Arrays can contain mixed types
   for LElement in ANode.Elements do
   begin
     LValue := ConvertValue(LElement);
-
-    // Check type consistency (first element sets the type)
-    if LArray.Count = 0 then
-    begin
-      LFirstKind := LValue.Kind;
-      // If first element is array, remember its element type
-      if (LValue.Kind = tvkArray) and (LValue.AsArray.Count > 0) then
-      begin
-        LFirstArray := LValue.AsArray;
-        LFirstArrayElementKind := LFirstArray[0].Kind;
-      end;
-    end
-    else
-    begin
-      // Check kind matches
-      if LValue.Kind <> LFirstKind then
-        raise ETomlParserException.Create(
-          'Mixed types in array are not allowed',
-          TTomlPosition.Create(1, 1, 0));
-
-      // If both are arrays, check their element types match
-      if (LValue.Kind = tvkArray) and (LFirstArray <> nil) then
-      begin
-        if LValue.AsArray.Count > 0 then
-        begin
-          if LValue.AsArray[0].Kind <> LFirstArrayElementKind then
-            raise ETomlParserException.Create(
-              'Mixed types in array are not allowed',
-              TTomlPosition.Create(1, 1, 0));
-        end;
-      end;
-    end;
-
     LArray.Add(LValue);
   end;
 
@@ -2582,9 +2551,13 @@ var
   LFullTableName: string;
   i: Integer;
   LDefinedTables: TList<string>;
+  LLastArrayTable: TToml;  // Track last table added to an array of tables
+  LLastArrayPath: string;  // Track the path of the last array
 begin
   LTable := TToml.Create;
   LDefinedTables := TList<string>.Create;
+  LLastArrayTable := nil;
+  LLastArrayPath := '';
   try
     // Process top-level key-values
     for LKeyValue in ADocument.KeyValues do
@@ -2601,27 +2574,86 @@ begin
         LTableSyntax := TTomlTableSyntax(LTableNode);
         LFullTableName := LTableSyntax.Key.GetFullKey;
 
-        // Check if table was already defined
-        if LDefinedTables.Contains(LFullTableName) then
-          raise ETomlParserException.Create(
-            Format('Table [%s] is already defined', [LFullTableName]),
-            TTomlPosition.Create(1, 1, 0));
-
-        LDefinedTables.Add(LFullTableName);
-        LCurrentTable := LTable;
-
-        // Navigate to the correct nested table
-        for i := 0 to LTableSyntax.Key.Segments.Count - 1 do
+        if LTableSyntax.IsArrayOfTables then
         begin
-          LKey := LTableSyntax.Key.Segments[i];
-          LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
-        end;
+          // [[array]] - Array of Tables
+          // Create a new table and add it to an array
+          LCurrentTable := LTable;
 
-        // Add key-values to this table
-        for LKeyValue in LTableSyntax.KeyValues do
+          // Navigate to parent tables, creating them if needed
+          for i := 0 to LTableSyntax.Key.Segments.Count - 2 do
+          begin
+            LKey := LTableSyntax.Key.Segments[i];
+            LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+          end;
+
+          // Get or create the array for the final segment
+          LKey := LTableSyntax.Key.Segments[LTableSyntax.Key.Segments.Count - 1];
+          var LArray: TTomlArray := LCurrentTable.GetOrCreateArray(LKey);
+
+          // Create a new table for this array element
+          var LNewTable: TToml := TToml.Create;
+          LArray.Add(TTomlValue.CreateTable(LNewTable));
+
+          // Track this as the last array table for subsequent [array.subtable] references
+          LLastArrayTable := LNewTable;
+          LLastArrayPath := LFullTableName;
+
+          // Add key-values to the new table
+          for LKeyValue in LTableSyntax.KeyValues do
+          begin
+            if LKeyValue is TTomlKeyValueSyntax then
+              ApplyKeyValue(LNewTable, TTomlKeyValueSyntax(LKeyValue));
+          end;
+        end
+        else
         begin
-          if LKeyValue is TTomlKeyValueSyntax then
-            ApplyKeyValue(LCurrentTable, TTomlKeyValueSyntax(LKeyValue));
+          // [table] - Regular Table
+          // Check if this is a subtable of the last array element
+          // e.g., [[arr]] followed by [arr.subtab]
+          if (LLastArrayPath <> '') and LFullTableName.StartsWith(LLastArrayPath + '.') then
+          begin
+            // This is a subtable of the last array element
+            // Navigate from the last array table
+            LCurrentTable := LLastArrayTable;
+            var LSubPath := LFullTableName.Substring(LLastArrayPath.Length + 1);
+            var LSubSegments := LSubPath.Split(['.']);
+
+            for var LSegment in LSubSegments do
+            begin
+              LCurrentTable := LCurrentTable.GetOrCreateTable(LSegment);
+            end;
+          end
+          else
+          begin
+            // Regular table definition
+            // Check if table was already defined
+            if LDefinedTables.Contains(LFullTableName) then
+              raise ETomlParserException.Create(
+                Format('Table [%s] is already defined', [LFullTableName]),
+                TTomlPosition.Create(1, 1, 0));
+
+            LDefinedTables.Add(LFullTableName);
+            LCurrentTable := LTable;
+
+            // Navigate to the correct nested table
+            for i := 0 to LTableSyntax.Key.Segments.Count - 1 do
+            begin
+              LKey := LTableSyntax.Key.Segments[i];
+              LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+            end;
+
+            // Clear last array tracking since we're in a different context
+            LLastArrayTable := nil;
+            LLastArrayPath := '';
+          end;
+
+          // Add key-values to this table
+          for LKeyValue in LTableSyntax.KeyValues do
+          begin
+            if LKeyValue is TTomlKeyValueSyntax then
+              ApplyKeyValue(LCurrentTable, TTomlKeyValueSyntax(LKeyValue));
+          end;
         end;
       end;
     end;

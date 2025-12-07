@@ -113,9 +113,6 @@ type
     procedure TestMalformedTable;
 
     [Test]
-    procedure TestInvalidArrayMixedTypes;
-
-    [Test]
     procedure TestInvalidDateTime;
 
     [Test]
@@ -136,6 +133,26 @@ type
   public
     [Test]
     procedure TestFloatParsingLocaleIndependent;
+  end;
+
+  [TestFixture]
+  TTomlHeterogeneousArrayTests = class
+  public
+    [Test]
+    procedure TestMixedTypesAllowed;
+
+    [Test]
+    procedure TestNestedArraysMixedTypes;
+  end;
+
+  [TestFixture]
+  TTomlArrayOfTablesTests = class
+  public
+    [Test]
+    procedure TestSimpleArrayOfTables;
+
+    [Test]
+    procedure TestArrayOfTablesWithSubtables;
   end;
 
 implementation
@@ -568,19 +585,6 @@ begin
   Assert.IsFalse(TToml.Validate('[]', LError), 'Should reject empty table name');
 end;
 
-procedure TTomlNegativeTests.TestInvalidArrayMixedTypes;
-var
-  LError: string;
-begin
-  // Mixed types in array (string and integer)
-  Assert.IsFalse(TToml.Validate('mixed = ["string", 123]', LError),
-    'Should reject mixed type arrays');
-
-  // Mixed types in array (array of integers and array of strings)
-  Assert.IsFalse(TToml.Validate('mixed = [[1, 2], ["a", "b"]]', LError),
-    'Should reject arrays with mixed element types');
-end;
-
 procedure TTomlNegativeTests.TestInvalidDateTime;
 var
   LError: string;
@@ -694,6 +698,151 @@ begin
 
     LValue := LTable['with_underscore'].AsFloat;
     Assert.AreEqual(1234.56789, LValue, 0.00001, 'Float with underscores should be parsed correctly');
+  finally
+    LTable.Free;
+  end;
+end;
+
+{ TTomlHeterogeneousArrayTests }
+
+procedure TTomlHeterogeneousArrayTests.TestMixedTypesAllowed;
+var
+  LToml: string;
+  LTable: TToml;
+  LArray: TTomlArray;
+begin
+  // TOML 1.0 allows mixed types in arrays
+  LToml := 'mixed = ["string", 42, true, 3.14]' + sLineBreak +
+           'strings_and_ints = ["hi", 42]';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('mixed'), 'Should have mixed array');
+    LArray := LTable['mixed'].AsArray;
+    Assert.AreEqual(4, LArray.Count, 'Array should have 4 elements');
+    Assert.AreEqual('string', LArray[0].AsString, 'First element should be string');
+    Assert.AreEqual(Int64(42), LArray[1].AsInteger, 'Second element should be integer');
+    Assert.IsTrue(LArray[2].AsBoolean, 'Third element should be boolean');
+    Assert.AreEqual(3.14, LArray[3].AsFloat, 0.001, 'Fourth element should be float');
+
+    LArray := LTable['strings_and_ints'].AsArray;
+    Assert.AreEqual(2, LArray.Count, 'Array should have 2 elements');
+    Assert.AreEqual('hi', LArray[0].AsString, 'First element should be string');
+    Assert.AreEqual(Int64(42), LArray[1].AsInteger, 'Second element should be integer');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlHeterogeneousArrayTests.TestNestedArraysMixedTypes;
+var
+  LToml: string;
+  LTable: TToml;
+  LArray, LNested: TTomlArray;
+begin
+  // TOML 1.0 allows mixed nested arrays
+  LToml := 'nested = [[1, 2], ["a", "b"], [1.1, 2.2]]';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('nested'), 'Should have nested array');
+    LArray := LTable['nested'].AsArray;
+    Assert.AreEqual(3, LArray.Count, 'Array should have 3 sub-arrays');
+
+    // First sub-array: [1, 2]
+    LNested := LArray[0].AsArray;
+    Assert.AreEqual(2, LNested.Count);
+    Assert.AreEqual(Int64(1), LNested[0].AsInteger);
+    Assert.AreEqual(Int64(2), LNested[1].AsInteger);
+
+    // Second sub-array: ["a", "b"]
+    LNested := LArray[1].AsArray;
+    Assert.AreEqual(2, LNested.Count);
+    Assert.AreEqual('a', LNested[0].AsString);
+    Assert.AreEqual('b', LNested[1].AsString);
+
+    // Third sub-array: [1.1, 2.2]
+    LNested := LArray[2].AsArray;
+    Assert.AreEqual(2, LNested.Count);
+    Assert.AreEqual(1.1, LNested[0].AsFloat, 0.001);
+    Assert.AreEqual(2.2, LNested[1].AsFloat, 0.001);
+  finally
+    LTable.Free;
+  end;
+end;
+
+{ TTomlArrayOfTablesTests }
+
+procedure TTomlArrayOfTablesTests.TestSimpleArrayOfTables;
+var
+  LToml: string;
+  LTable: TToml;
+  LArray: TTomlArray;
+  LProduct: TToml;
+begin
+  // Test [[array]] syntax creates an array of tables
+  LToml := '[[products]]' + sLineBreak +
+           'name = "Hammer"' + sLineBreak +
+           'sku = 738594937' + sLineBreak +
+           sLineBreak +
+           '[[products]]' + sLineBreak +
+           'name = "Nail"' + sLineBreak +
+           'sku = 284758393';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('products'), 'Should have products array');
+    LArray := LTable['products'].AsArray;
+    Assert.AreEqual(2, LArray.Count, 'Should have 2 products');
+
+    // First product
+    LProduct := LArray[0].AsTable;
+    Assert.AreEqual('Hammer', LProduct['name'].AsString, 'First product name');
+    Assert.AreEqual(Int64(738594937), LProduct['sku'].AsInteger, 'First product SKU');
+
+    // Second product
+    LProduct := LArray[1].AsTable;
+    Assert.AreEqual('Nail', LProduct['name'].AsString, 'Second product name');
+    Assert.AreEqual(Int64(284758393), LProduct['sku'].AsInteger, 'Second product SKU');
+  finally
+    LTable.Free;
+  end;
+end;
+
+procedure TTomlArrayOfTablesTests.TestArrayOfTablesWithSubtables;
+var
+  LToml: string;
+  LTable: TToml;
+  LArray: TTomlArray;
+  LItem: TToml;
+  LSubtab: TToml;
+begin
+  // Test [[array]] followed by [array.subtable]
+  LToml := '[[arr]]' + sLineBreak +
+           '[arr.subtab]' + sLineBreak +
+           'val = 1' + sLineBreak +
+           sLineBreak +
+           '[[arr]]' + sLineBreak +
+           '[arr.subtab]' + sLineBreak +
+           'val = 2';
+
+  LTable := TToml.FromString(LToml);
+  try
+    Assert.IsTrue(LTable.ContainsKey('arr'), 'Should have arr array');
+    LArray := LTable['arr'].AsArray;
+    Assert.AreEqual(2, LArray.Count, 'Should have 2 array elements');
+
+    // First array element
+    LItem := LArray[0].AsTable;
+    Assert.IsTrue(LItem.ContainsKey('subtab'), 'First element should have subtab');
+    LSubtab := LItem['subtab'].AsTable;
+    Assert.AreEqual(Int64(1), LSubtab['val'].AsInteger, 'First subtab val should be 1');
+
+    // Second array element
+    LItem := LArray[1].AsTable;
+    Assert.IsTrue(LItem.ContainsKey('subtab'), 'Second element should have subtab');
+    LSubtab := LItem['subtab'].AsTable;
+    Assert.AreEqual(Int64(2), LSubtab['val'].AsInteger, 'Second subtab val should be 2');
   finally
     LTable.Free;
   end;
