@@ -3428,7 +3428,26 @@ begin
   for i := 0 to AKeyValue.Key.Segments.Count - 2 do
   begin
     LKey := AKeyValue.Key.Segments[i];
-    LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+
+    // Check if trying to extend an inline table
+    if LCurrentTable.ContainsKey(LKey) then
+    begin
+      if LCurrentTable[LKey].Kind = tvkTable then
+      begin
+        var LSubTable := LCurrentTable[LKey].AsTable;
+        if LSubTable.IsInline then
+          raise ETomlParserException.Create(
+            Format('Cannot extend inline table "%s"', [LKey]),
+            TTomlPosition.Create(1, 1, 0));
+        LCurrentTable := LSubTable;
+      end
+      else
+        raise ETomlParserException.Create(
+          Format('Key "%s" is already defined as non-table value', [LKey]),
+          TTomlPosition.Create(1, 1, 0));
+    end
+    else
+      LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
   end;
 
   // Set the final value
@@ -3503,6 +3522,23 @@ begin
                   TTomlPosition.Create(1, 1, 0));
               LCurrentTable := LArray[LArray.Count - 1].AsTable;
             end
+            else if LCurrentTable.ContainsKey(LKey) then
+            begin
+              // Check if trying to extend an inline table
+              if LCurrentTable[LKey].Kind = tvkTable then
+              begin
+                var LSubTable := LCurrentTable[LKey].AsTable;
+                if LSubTable.IsInline then
+                  raise ETomlParserException.Create(
+                    Format('Cannot extend inline table "%s"', [LKey]),
+                    TTomlPosition.Create(1, 1, 0));
+                LCurrentTable := LSubTable;
+              end
+              else
+                raise ETomlParserException.Create(
+                  Format('Key "%s" is already defined as non-table value', [LKey]),
+                  TTomlPosition.Create(1, 1, 0));
+            end
             else
             begin
               // Regular table navigation
@@ -3544,7 +3580,25 @@ begin
 
             for var LSegment in LSubSegments do
             begin
-              LCurrentTable := LCurrentTable.GetOrCreateTable(LSegment);
+              // Check if trying to redefine an inline table
+              if LCurrentTable.ContainsKey(LSegment) then
+              begin
+                if LCurrentTable[LSegment].Kind = tvkTable then
+                begin
+                  var LSubTable := LCurrentTable[LSegment].AsTable;
+                  if LSubTable.IsInline then
+                    raise ETomlParserException.Create(
+                      Format('Cannot redefine inline table [%s]', [LFullTableName]),
+                      TTomlPosition.Create(1, 1, 0));
+                  LCurrentTable := LSubTable;
+                end
+                else
+                  raise ETomlParserException.Create(
+                    Format('Key "%s" is already defined as non-table value', [LSegment]),
+                    TTomlPosition.Create(1, 1, 0));
+              end
+              else
+                LCurrentTable := LCurrentTable.GetOrCreateTable(LSegment);
             end;
           end
           else
@@ -3563,7 +3617,26 @@ begin
             for i := 0 to LTableSyntax.Key.Segments.Count - 1 do
             begin
               LKey := LTableSyntax.Key.Segments[i];
-              LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+
+              // Check if trying to redefine an inline table
+              if LCurrentTable.ContainsKey(LKey) then
+              begin
+                if LCurrentTable[LKey].Kind = tvkTable then
+                begin
+                  var LSubTable := LCurrentTable[LKey].AsTable;
+                  if LSubTable.IsInline then
+                    raise ETomlParserException.Create(
+                      Format('Cannot redefine inline table [%s]', [LFullTableName]),
+                      TTomlPosition.Create(1, 1, 0));
+                  LCurrentTable := LSubTable;
+                end
+                else
+                  raise ETomlParserException.Create(
+                    Format('Key "%s" is already defined as non-table value', [LKey]),
+                    TTomlPosition.Create(1, 1, 0));
+              end
+              else
+                LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
             end;
 
             // Clear last array tracking since we're in a different context
