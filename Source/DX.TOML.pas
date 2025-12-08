@@ -421,7 +421,7 @@ type
     procedure SkipTrivia;
 
     function ParseDocument: TTomlDocumentSyntax;
-    function ParseKeyValue: TTomlKeyValueSyntax;
+    function ParseKeyValue(ARequireEOL: Boolean = True): TTomlKeyValueSyntax;
     function ParseKey: TTomlKeySyntax;
     function ParseValue: TTomlSyntaxNode;
     function ParseArray: TTomlArraySyntax;
@@ -2761,7 +2761,7 @@ begin
 
   while not Match(tkRightBrace) do
   begin
-    LKeyValue := ParseKeyValue;
+    LKeyValue := ParseKeyValue(False);  // Inside inline table, commas separate KVs
     LTable.AddKeyValue(LKeyValue);
 
     SkipTrivia;
@@ -2784,7 +2784,7 @@ begin
   Result := LTable;
 end;
 
-function TTomlParser.ParseKeyValue: TTomlKeyValueSyntax;
+function TTomlParser.ParseKeyValue(ARequireEOL: Boolean = True): TTomlKeyValueSyntax;
 var
   LKey: TTomlKeySyntax;
   LValue: TTomlSyntaxNode;
@@ -2798,6 +2798,15 @@ begin
   SkipTrivia;
 
   LValue := ParseValue;
+
+  // TOML spec: Key-value pairs must be on their own line (newline or EOF after value)
+  // Exception: Inside inline tables, key-value pairs are separated by commas
+  if ARequireEOL then
+  begin
+    SkipTrivia;
+    if not Match(tkNewLine) and not IsEof then
+      Error('Expected newline or end of file after key-value pair');
+  end;
 
   Result := TTomlKeyValueSyntax.Create(LKey, LValue);
 end;
@@ -2830,7 +2839,10 @@ begin
 
   SkipTrivia;
 
-  // Skip newline after table header
+  // TOML spec: Table headers must be on their own line (newline or EOF after header)
+  if not Match(tkNewLine) and not IsEof then
+    Error('Expected newline or end of file after table header');
+
   if Match(tkNewLine) then
     Advance;
 
