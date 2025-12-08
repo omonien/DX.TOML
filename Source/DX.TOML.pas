@@ -428,6 +428,13 @@ type
     /// <returns>True if a line ending was skipped</returns>
     class function SkipCRLF(var AIndex: Integer; const AText: string): Boolean;
 
+    /// <summary>Process a single escape sequence starting at AIndex</summary>
+    /// <param name="AText">The input text</param>
+    /// <param name="AIndex">Current position (will be advanced past the escape sequence)</param>
+    /// <param name="AIsMultiline">True if processing a multiline string</param>
+    /// <returns>The unescaped character(s)</returns>
+    function ProcessEscapeSequence(const AText: string; var AIndex: Integer; AIsMultiline: Boolean): string;
+
     procedure Error(const AMessage: string);
   public
     constructor Create(ALexer: TTomlLexer);
@@ -1757,6 +1764,148 @@ begin
   end;
 end;
 
+function TTomlParser.ProcessEscapeSequence(const AText: string; var AIndex: Integer; AIsMultiline: Boolean): string;
+var
+  LHex: string;
+  LCodePoint: Integer;
+  LHigh, LLow: Integer;
+  j: Integer;
+begin
+  Result := '';
+
+  // AIndex points to the character after the backslash
+  if AIndex > Length(AText) then
+    Exit;
+
+  case AText[AIndex] of
+    'n': Result := CH_LF;
+    'r': Result := CH_CR;
+    't': Result := CH_TAB;
+    'b': Result := CH_BACKSPACE;
+    'f': Result := CH_FF;
+    '\': Result := '\';
+    '"': Result := '"';
+    '''': Result := '''';
+    '/': Result := '/';
+
+    'u':
+      begin
+        // \uXXXX - 4 hex digits for Unicode code point
+        if AIndex + 4 <= Length(AText) then
+        begin
+          LHex := Copy(AText, AIndex + 1, 4);
+          if TryStrToInt('$' + LHex, LCodePoint) then
+          begin
+            Result := Char(LCodePoint);
+            Inc(AIndex, 4);  // Skip the 4 hex digits
+          end
+          else
+            raise ETomlParserException.Create(
+              Format('Invalid Unicode escape sequence: \u%s', [LHex]),
+              TTomlPosition.Create(1, 1, 0));
+        end
+        else
+          raise ETomlParserException.Create(
+            'Incomplete Unicode escape sequence: \u requires 4 hex digits',
+            TTomlPosition.Create(1, 1, 0));
+      end;
+
+    'U':
+      begin
+        // \UXXXXXXXX - 8 hex digits for Unicode code point
+        if AIndex + 8 <= Length(AText) then
+        begin
+          LHex := Copy(AText, AIndex + 1, 8);
+          if TryStrToInt('$' + LHex, LCodePoint) then
+          begin
+            // Convert code point to UTF-16 surrogate pair if needed
+            if LCodePoint <= MAX_BMP_CODEPOINT then
+              Result := Char(LCodePoint)
+            else if LCodePoint <= MAX_UNICODE_CODEPOINT then
+            begin
+              // Convert to UTF-16 surrogate pair
+              LCodePoint := LCodePoint - SURROGATE_OFFSET;
+              LHigh := HIGH_SURROGATE_BASE + (LCodePoint shr 10);
+              LLow := LOW_SURROGATE_BASE + (LCodePoint and $3FF);
+              Result := Char(LHigh) + Char(LLow);
+            end
+            else
+              raise ETomlParserException.Create(
+                Format('Invalid Unicode code point: \U%s', [LHex]),
+                TTomlPosition.Create(1, 1, 0));
+            Inc(AIndex, 8);  // Skip the 8 hex digits
+          end
+          else
+            raise ETomlParserException.Create(
+              Format('Invalid Unicode escape sequence: \U%s', [LHex]),
+              TTomlPosition.Create(1, 1, 0));
+        end
+        else
+          raise ETomlParserException.Create(
+            'Incomplete Unicode escape sequence: \U requires 8 hex digits',
+            TTomlPosition.Create(1, 1, 0));
+      end;
+
+    ' ', #9:
+      begin
+        // Whitespace after backslash - check if line-ending backslash
+        if AIsMultiline then
+        begin
+          // Skip trailing whitespace on the current line
+          j := AIndex;
+          while (j <= Length(AText)) and CharInSet(AText[j], [' ', #9]) do
+            Inc(j);
+
+          // Check if followed by newline
+          if (j <= Length(AText)) and CharInSet(AText[j], [#10, #13]) then
+          begin
+            // Line-ending backslash - skip whitespace and newline
+            AIndex := j;  // Move to newline character
+
+            // Skip CRLF or LF
+            SkipCRLF(AIndex, AText);
+
+            // Skip any whitespace at the beginning of the next line
+            while (AIndex + 1 <= Length(AText)) and CharInSet(AText[AIndex + 1], [' ', #9, #10, #13]) do
+              Inc(AIndex);
+          end
+          else
+            // Not a line-ending backslash
+            raise ETomlParserException.Create(
+              Format('Invalid escape sequence: \%s', [AText[AIndex]]),
+              TTomlPosition.Create(1, 1, 0));
+        end
+        else
+          raise ETomlParserException.Create(
+            Format('Invalid escape sequence: \%s', [AText[AIndex]]),
+            TTomlPosition.Create(1, 1, 0));
+      end;
+
+    #10, #13:
+      begin
+        // Line-ending backslash in multiline strings (no trailing whitespace)
+        // Skip the newline and any following whitespace
+        if AIsMultiline then
+        begin
+          // Skip CRLF or LF
+          SkipCRLF(AIndex, AText);
+
+          // Skip any whitespace at the beginning of the next line
+          while (AIndex + 1 <= Length(AText)) and CharInSet(AText[AIndex + 1], [' ', #9, #10, #13]) do
+            Inc(AIndex);
+        end
+        else
+          raise ETomlParserException.Create(
+            'Line-ending backslash only allowed in multiline strings',
+            TTomlPosition.Create(1, 1, 0));
+      end;
+  else
+    raise ETomlParserException.Create(
+      Format('Invalid escape sequence: \%s', [AText[AIndex]]),
+      TTomlPosition.Create(1, 1, 0));
+  end;
+end;
+
 function TTomlParser.ParseString(const AText: string): string;
 var
   i: Integer;
@@ -1811,134 +1960,7 @@ begin
     begin
       // Handle escape sequences
       Inc(i);
-      if i <= Length(AText) then
-      begin
-        case AText[i] of
-          'n': Result := Result + CH_LF;
-          'r': Result := Result + CH_CR;
-          't': Result := Result + CH_TAB;
-          'b': Result := Result + CH_BACKSPACE;
-          'f': Result := Result + CH_FF;
-          '\': Result := Result + '\';
-          '"': Result := Result + '"';
-          '''': Result := Result + '''';
-          '/': Result := Result + '/';
-          'u':
-            begin
-              // \uXXXX - 4 hex digits for Unicode code point
-              if i + 4 <= Length(AText) then
-              begin
-                var LHex := Copy(AText, i + 1, 4);
-                var LCodePoint: Integer;
-                if TryStrToInt('$' + LHex, LCodePoint) then
-                begin
-                  Result := Result + Char(LCodePoint);
-                  Inc(i, 4);  // Skip the 4 hex digits
-                end
-                else
-                  raise ETomlParserException.Create(
-                    Format('Invalid Unicode escape sequence: \u%s', [LHex]),
-                    TTomlPosition.Create(1, 1, 0));
-              end
-              else
-                raise ETomlParserException.Create(
-                  'Incomplete Unicode escape sequence: \u requires 4 hex digits',
-                  TTomlPosition.Create(1, 1, 0));
-            end;
-          'U':
-            begin
-              // \UXXXXXXXX - 8 hex digits for Unicode code point
-              if i + 8 <= Length(AText) then
-              begin
-                var LHex := Copy(AText, i + 1, 8);
-                var LCodePoint: Integer;
-                if TryStrToInt('$' + LHex, LCodePoint) then
-                begin
-                  // Convert code point to UTF-16 surrogate pair if needed
-                  if LCodePoint <= MAX_BMP_CODEPOINT then
-                    Result := Result + Char(LCodePoint)
-                  else if LCodePoint <= MAX_UNICODE_CODEPOINT then
-                  begin
-                    // Convert to UTF-16 surrogate pair
-                    LCodePoint := LCodePoint - SURROGATE_OFFSET;
-                    var LHigh := HIGH_SURROGATE_BASE + (LCodePoint shr 10);
-                    var LLow := LOW_SURROGATE_BASE + (LCodePoint and $3FF);
-                    Result := Result + Char(LHigh) + Char(LLow);
-                  end
-                  else
-                    raise ETomlParserException.Create(
-                      Format('Invalid Unicode code point: \U%s', [LHex]),
-                      TTomlPosition.Create(1, 1, 0));
-                  Inc(i, 8);  // Skip the 8 hex digits
-                end
-                else
-                  raise ETomlParserException.Create(
-                    Format('Invalid Unicode escape sequence: \U%s', [LHex]),
-                    TTomlPosition.Create(1, 1, 0));
-              end
-              else
-                raise ETomlParserException.Create(
-                  'Incomplete Unicode escape sequence: \U requires 8 hex digits',
-                  TTomlPosition.Create(1, 1, 0));
-            end;
-          ' ', #9:
-            begin
-              // Whitespace after backslash - check if line-ending backslash
-              if LIsMultiline then
-              begin
-                // Skip trailing whitespace on the current line
-                var j := i;
-                while (j <= Length(AText)) and CharInSet(AText[j], [' ', #9]) do
-                  Inc(j);
-
-                // Check if followed by newline
-                if (j <= Length(AText)) and CharInSet(AText[j], [#10, #13]) then
-                begin
-                  // Line-ending backslash - skip whitespace and newline
-                  i := j;  // Move to newline character
-
-                  // Skip CRLF or LF
-                  SkipCRLF(i, AText);
-
-                  // Skip any whitespace at the beginning of the next line
-                  while (i + 1 <= Length(AText)) and CharInSet(AText[i + 1], [' ', #9, #10, #13]) do
-                    Inc(i);
-                end
-                else
-                  // Not a line-ending backslash
-                  raise ETomlParserException.Create(
-                    Format('Invalid escape sequence: \%s', [AText[i]]),
-                    TTomlPosition.Create(1, 1, 0));
-              end
-              else
-                raise ETomlParserException.Create(
-                  Format('Invalid escape sequence: \%s', [AText[i]]),
-                  TTomlPosition.Create(1, 1, 0));
-            end;
-          #10, #13:
-            begin
-              // Line-ending backslash in multiline strings (no trailing whitespace)
-              // Skip the newline and any following whitespace
-              if LIsMultiline then
-              begin
-                // Skip CRLF or LF
-                SkipCRLF(i, AText);
-
-                // Skip any whitespace at the beginning of the next line
-                while (i + 1 <= Length(AText)) and CharInSet(AText[i + 1], [' ', #9, #10, #13]) do
-                  Inc(i);
-              end
-              else
-                raise ETomlParserException.Create(
-                  'Line-ending backslash only allowed in multiline strings',
-                  TTomlPosition.Create(1, 1, 0));
-            end;
-        else
-          raise ETomlParserException.Create(
-            Format('Invalid escape sequence: \%s', [AText[i]]),
-            TTomlPosition.Create(1, 1, 0));
-        end;
-      end;
+      Result := Result + ProcessEscapeSequence(AText, i, LIsMultiline);
     end
     else if (LChar = LDelimiter) then
     begin
