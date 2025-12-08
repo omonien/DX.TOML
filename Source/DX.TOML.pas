@@ -192,6 +192,8 @@ type
     function IsWhitespace(AChar: Char): Boolean;
     function IsBareKeyChar(AChar: Char): Boolean;
     function IsDigit(AChar: Char): Boolean;
+    /// <summary>Check if current position looks like start of a number (not bare key)</summary>
+    function LooksLikeNumber: Boolean;
   public
     constructor Create(const ASource: string);
     destructor Destroy; override;
@@ -757,6 +759,45 @@ begin
   Result := AChar.IsDigit;
 end;
 
+function TTomlLexer.LooksLikeNumber: Boolean;
+var
+  LChar: Char;
+  LNext: Char;
+begin
+  // Check if current position looks like a number vs a bare key
+  // Conservative approach: only say it's a number if we're sure
+  // Numbers can start with: +, -, 0-9
+  // But bare keys can also start with these, so we need to check context
+
+  LChar := GetCurrentChar;
+
+  // If it starts with a digit, it's a number UNLESS followed by a letter
+  // (except for hex/octal/binary prefixes)
+  if IsDigit(LChar) then
+  begin
+    LNext := GetLookahead(1);
+    // If it's "0x", "0o", "0b", it's definitely a number
+    if (LChar = '0') and CharInSet(LNext, ['x', 'X', 'o', 'O', 'b', 'B']) then
+      Exit(True);
+    // If next is a letter (not part of number), it's a bare key like "1key"
+    if LNext.IsLetter and not CharInSet(LNext, ['x', 'X', 'o', 'O', 'b', 'B', 'e', 'E']) then
+      Exit(False);
+    // Otherwise it's likely a number (digit, underscore, colon for datetime, etc.)
+    Result := True;
+  end
+  // If it starts with +/-, check next character
+  else if CharInSet(LChar, ['+', '-']) then
+  begin
+    LNext := GetLookahead(1);
+    // If followed by digit, it's a number
+    // If followed by 'i' (inf) or 'n' (nan), it's a number
+    // Otherwise it's a bare key like "-key"
+    Result := IsDigit(LNext) or (LNext = 'i') or (LNext = 'n');
+  end
+  else
+    Result := False;
+end;
+
 procedure TTomlLexer.ScanWhitespace;
 var
   LStart: TTomlPosition;
@@ -1319,7 +1360,10 @@ begin
         end;
 
       '0'..'9', '+', '-':
-        ScanNumber;
+        if LooksLikeNumber then
+          ScanNumber
+        else
+          ScanBareKeyOrKeyword;
     else
       if IsBareKeyChar(LChar) then
         ScanBareKeyOrKeyword
