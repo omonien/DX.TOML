@@ -412,6 +412,10 @@ type
     function ParseTable: TTomlTableSyntax;
     function ParseString(const AText: string): string;
 
+    /// <summary>Skip CRLF or LF sequence, advancing the index appropriately</summary>
+    /// <returns>True if a line ending was skipped</returns>
+    class function SkipCRLF(var AIndex: Integer; const AText: string): Boolean;
+
     procedure Error(const AMessage: string);
   public
     constructor Create(ALexer: TTomlLexer);
@@ -1715,6 +1719,26 @@ begin
   raise ETomlParserException.Create(AMessage, LPos);
 end;
 
+class function TTomlParser.SkipCRLF(var AIndex: Integer; const AText: string): Boolean;
+begin
+  Result := False;
+
+  // Check if we're at a CR followed by LF (CRLF)
+  if (AIndex <= Length(AText)) and (AText[AIndex] = CH_CR) then
+  begin
+    if (AIndex + 1 <= Length(AText)) and (AText[AIndex + 1] = CH_LF) then
+    begin
+      Inc(AIndex); // Skip the LF after CR
+      Result := True;
+    end;
+  end
+  // Check if we're at a standalone LF
+  else if (AIndex <= Length(AText)) and (AText[AIndex] = CH_LF) then
+  begin
+    Result := True;
+  end;
+end;
+
 function TTomlParser.ParseString(const AText: string): string;
 var
   i: Integer;
@@ -1754,14 +1778,9 @@ begin
           // Could be LF (\n) or CRLF (\r\n)
           if (i + 1 <= Length(AText)) then
           begin
-            if (AText[i + 1] = #13) and (i + 2 <= Length(AText)) and (AText[i + 2] = #10) then
-            begin
-              Inc(i, 2);  // Skip CRLF
-            end
-            else if (AText[i + 1] = #10) then
-            begin
-              Inc(i);  // Skip LF
-            end;
+            var j := i + 1;
+            if SkipCRLF(j, AText) then
+              i := j;
           end;
         end;
       end;
@@ -1858,12 +1877,10 @@ begin
                 if (j <= Length(AText)) and CharInSet(AText[j], [#10, #13]) then
                 begin
                   // Line-ending backslash - skip whitespace and newline
-                  i := j - 1;  // Will be incremented at end of loop
-                  Inc(i);  // Move to newline character
+                  i := j;  // Move to newline character
 
                   // Skip CRLF or LF
-                  if (AText[i] = #13) and (i + 1 <= Length(AText)) and (AText[i + 1] = #10) then
-                    Inc(i);  // Skip LF after CR
+                  SkipCRLF(i, AText);
 
                   // Skip any whitespace at the beginning of the next line
                   while (i + 1 <= Length(AText)) and CharInSet(AText[i + 1], [' ', #9, #10, #13]) do
@@ -1887,8 +1904,7 @@ begin
               if LIsMultiline then
               begin
                 // Skip CRLF or LF
-                if (AText[i] = #13) and (i + 1 <= Length(AText)) and (AText[i + 1] = #10) then
-                  Inc(i);  // Skip LF after CR
+                SkipCRLF(i, AText);
 
                 // Skip any whitespace at the beginning of the next line
                 while (i + 1 <= Length(AText)) and CharInSet(AText[i + 1], [' ', #9, #10, #13]) do
@@ -1935,11 +1951,15 @@ begin
     else
     begin
       // Normalize line endings: CRLF -> LF
-      if (LChar = #13) and (i + 1 <= Length(AText)) and (AText[i + 1] = #10) then
+      if LChar = CH_CR then
       begin
-        // Skip the CR, the LF will be added in the next iteration
-        Inc(i);
-        Continue;
+        var j := i;
+        if SkipCRLF(j, AText) then
+        begin
+          // Skip the CR, the LF will be added in the next iteration
+          i := j;
+          Continue;
+        end;
       end;
       Result := Result + LChar;
     end;
