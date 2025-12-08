@@ -2349,6 +2349,12 @@ begin
           LHex := Copy(AText, AIndex + 1, 4);
           if TryStrToInt('$' + LHex, LCodePoint) then
           begin
+            // TOML spec: Surrogate pairs (U+D800-U+DFFF) are not allowed
+            if (LCodePoint >= $D800) and (LCodePoint <= $DFFF) then
+              raise ETomlParserException.Create(
+                Format('Invalid Unicode code point: \u%s (surrogate pair range U+D800-U+DFFF not allowed)', [LHex]),
+                TTomlPosition.Create(1, 1, 0));
+
             Result := Char(LCodePoint);
             Inc(AIndex, 4);  // Skip the 4 hex digits
           end
@@ -2369,23 +2375,46 @@ begin
         if AIndex + 8 <= Length(AText) then
         begin
           LHex := Copy(AText, AIndex + 1, 8);
+
+          // Check for values > U+10FFFF by comparing hex string directly
+          // Values > 0x10FFFF would have high bits set (first two hex digits > '10')
+          if (StrToIntDef('$' + Copy(LHex, 1, 2), 0) > $10) or
+             ((Copy(LHex, 1, 2) = '10') and (Copy(LHex, 3, 6) > 'FFFF')) then
+            raise ETomlParserException.Create(
+              Format('Invalid Unicode code point: \U%s (maximum is U+10FFFF)', [LHex]),
+              TTomlPosition.Create(1, 1, 0));
+
           if TryStrToInt('$' + LHex, LCodePoint) then
           begin
+            // Handle potential overflow (LCodePoint might be negative for large hex values)
+            if LCodePoint < 0 then
+              raise ETomlParserException.Create(
+                Format('Invalid Unicode code point: \U%s (maximum is U+10FFFF)', [LHex]),
+                TTomlPosition.Create(1, 1, 0));
+
+            // TOML spec: Surrogate pairs (U+D800-U+DFFF) are not allowed
+            if (LCodePoint >= $D800) and (LCodePoint <= $DFFF) then
+              raise ETomlParserException.Create(
+                Format('Invalid Unicode code point: \U%s (surrogate pair range U+D800-U+DFFF not allowed)', [LHex]),
+                TTomlPosition.Create(1, 1, 0));
+
+            // TOML spec: Code points must be <= U+10FFFF
+            if LCodePoint > MAX_UNICODE_CODEPOINT then
+              raise ETomlParserException.Create(
+                Format('Invalid Unicode code point: \U%s (maximum is U+10FFFF)', [LHex]),
+                TTomlPosition.Create(1, 1, 0));
+
             // Convert code point to UTF-16 surrogate pair if needed
             if LCodePoint <= MAX_BMP_CODEPOINT then
               Result := Char(LCodePoint)
-            else if LCodePoint <= MAX_UNICODE_CODEPOINT then
+            else
             begin
               // Convert to UTF-16 surrogate pair
               LCodePoint := LCodePoint - SURROGATE_OFFSET;
               LHigh := HIGH_SURROGATE_BASE + (LCodePoint shr 10);
               LLow := LOW_SURROGATE_BASE + (LCodePoint and $3FF);
               Result := Char(LHigh) + Char(LLow);
-            end
-            else
-              raise ETomlParserException.Create(
-                Format('Invalid Unicode code point: \U%s', [LHex]),
-                TTomlPosition.Create(1, 1, 0));
+            end;
             Inc(AIndex, 8);  // Skip the 8 hex digits
           end
           else
