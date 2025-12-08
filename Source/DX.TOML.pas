@@ -45,6 +45,45 @@ uses
   System.TypInfo,
   System.Math;
 
+const
+  {$REGION 'Character Constants'}
+  // ASCII Control Characters
+  CH_NULL = #0;
+  CH_BACKSPACE = #8;
+  CH_TAB = #9;
+  CH_LF = #10;
+  CH_FF = #12;
+  CH_CR = #13;
+  CH_DELETE = #127;
+
+  // Line ending sequences
+  CRLF = #13#10;
+  {$ENDREGION}
+
+  {$REGION 'Unicode Constants'}
+  // Unicode limits
+  MAX_BMP_CODEPOINT = $FFFF;
+  MAX_UNICODE_CODEPOINT = $10FFFF;
+  SURROGATE_OFFSET = $10000;
+
+  // Surrogate pair ranges
+  HIGH_SURROGATE_BASE = $D800;
+  LOW_SURROGATE_BASE = $DC00;
+  {$ENDREGION}
+
+  {$REGION 'Number Format Constants'}
+  // Number base prefixes
+  PREFIX_HEX = '0x';
+  PREFIX_OCTAL = '0o';
+  PREFIX_BINARY = '0b';
+
+  // Number bases
+  BASE_BINARY = 2;
+  BASE_OCTAL = 8;
+  BASE_DECIMAL = 10;
+  BASE_HEX = 16;
+  {$ENDREGION}
+
 type
   {$REGION 'Forward Declarations'}
   TTomlToken = class;
@@ -1738,11 +1777,11 @@ begin
       if i <= Length(AText) then
       begin
         case AText[i] of
-          'n': Result := Result + #10;
-          'r': Result := Result + #13;
-          't': Result := Result + #9;
-          'b': Result := Result + #8;
-          'f': Result := Result + #12;
+          'n': Result := Result + CH_LF;
+          'r': Result := Result + CH_CR;
+          't': Result := Result + CH_TAB;
+          'b': Result := Result + CH_BACKSPACE;
+          'f': Result := Result + CH_FF;
           '\': Result := Result + '\';
           '"': Result := Result + '"';
           '''': Result := Result + '''';
@@ -1779,14 +1818,14 @@ begin
                 if TryStrToInt('$' + LHex, LCodePoint) then
                 begin
                   // Convert code point to UTF-16 surrogate pair if needed
-                  if LCodePoint <= $FFFF then
+                  if LCodePoint <= MAX_BMP_CODEPOINT then
                     Result := Result + Char(LCodePoint)
-                  else if LCodePoint <= $10FFFF then
+                  else if LCodePoint <= MAX_UNICODE_CODEPOINT then
                   begin
                     // Convert to UTF-16 surrogate pair
-                    LCodePoint := LCodePoint - $10000;
-                    var LHigh := $D800 + (LCodePoint shr 10);
-                    var LLow := $DC00 + (LCodePoint and $3FF);
+                    LCodePoint := LCodePoint - SURROGATE_OFFSET;
+                    var LHigh := HIGH_SURROGATE_BASE + (LCodePoint shr 10);
+                    var LLow := LOW_SURROGATE_BASE + (LCodePoint and $3FF);
                     Result := Result + Char(LHigh) + Char(LLow);
                   end
                   else
@@ -3031,11 +3070,11 @@ begin
     case LChar of
       '\': Result := Result + '\\';
       '"': Result := Result + '\"';
-      #8: Result := Result + '\b';
-      #9: Result := Result + '\t';
-      #10: Result := Result + '\n';
-      #12: Result := Result + '\f';
-      #13: Result := Result + '\r';
+      CH_BACKSPACE: Result := Result + '\b';
+      CH_TAB: Result := Result + '\t';
+      CH_LF: Result := Result + '\n';
+      CH_FF: Result := Result + '\f';
+      CH_CR: Result := Result + '\r';
     else
       Result := Result + LChar;
     end;
