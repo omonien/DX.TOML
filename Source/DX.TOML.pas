@@ -139,6 +139,13 @@ type
     constructor Create(ALine, AColumn, AOffset: Integer);
   end;
 
+  /// <summary>Scanner state for save/restore lookahead operations</summary>
+  TScannerState = record
+    Position: Integer;
+    Line: Integer;
+    Column: Integer;
+  end;
+
   /// <summary>Individual token</summary>
   TTomlToken = class
   private
@@ -168,6 +175,11 @@ type
 
     procedure Advance(ACount: Integer = 1);
     function CreatePosition: TTomlPosition;
+
+    /// <summary>Save current scanner state for lookahead operations</summary>
+    function SaveState: TScannerState;
+    /// <summary>Restore previously saved scanner state</summary>
+    procedure RestoreState(const AState: TScannerState);
 
     procedure ScanWhitespace;
     procedure ScanComment;
@@ -709,6 +721,20 @@ begin
   Result := TTomlPosition.Create(FLine, FColumn, FPosition);
 end;
 
+function TTomlLexer.SaveState: TScannerState;
+begin
+  Result.Position := FPosition;
+  Result.Line := FLine;
+  Result.Column := FColumn;
+end;
+
+procedure TTomlLexer.RestoreState(const AState: TScannerState);
+begin
+  FPosition := AState.Position;
+  FLine := AState.Line;
+  FColumn := AState.Column;
+end;
+
 function TTomlLexer.IsWhitespace(AChar: Char): Boolean;
 begin
   Result := (AChar = ' ') or (AChar = #9);  // Space or Tab
@@ -869,9 +895,7 @@ begin
     begin
       // Look ahead to count consecutive quotes
       LQuoteCount := 0;
-      var LSavedPos := FPosition;
-      var LSavedLine := FLine;
-      var LSavedColumn := FColumn;
+      var LSavedState := SaveState;
 
       while (not IsEof) and (GetCurrentChar = ADelimiter) do
       begin
@@ -880,9 +904,7 @@ begin
       end;
 
       // Restore position
-      FPosition := LSavedPos;
-      FLine := LSavedLine;
-      FColumn := LSavedColumn;
+      RestoreState(LSavedState);
 
       // If we found 3+ quotes, the first 3 are the closing delimiter
       if LQuoteCount >= 3 then
@@ -1014,9 +1036,7 @@ begin
       // Look ahead to see if this is a dotted key or a float
       // Dotted key pattern: digit+ '.' digit+ whitespace* '='
       // Float pattern: digit+ '.' digit+ (not followed by '=')
-      var LSavedPos := FPosition;
-      var LSavedLine := FLine;
-      var LSavedColumn := FColumn;
+      var LSavedState := SaveState;
       var LIsDottedKey := False;
 
       // Tentatively consume the dot and digits
@@ -1033,9 +1053,7 @@ begin
         LIsDottedKey := True;
 
       // Restore position
-      FPosition := LSavedPos;
-      FLine := LSavedLine;
-      FColumn := LSavedColumn;
+      RestoreState(LSavedState);
 
       // If not a dotted key, consume as float
       if not LIsDottedKey then
