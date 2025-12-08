@@ -795,9 +795,20 @@ begin
     LNext := GetLookahead(1);
     // If followed by digit, it's a number
     // If followed by 'i' (inf) or 'n' (nan), it's a number
-    // If followed by '.' or another sign it might be an invalid number like "+.5" or "++99" - treat as number to get proper error
-    // Otherwise it's a bare key like "-key"
-    Result := IsDigit(LNext) or (LNext = 'i') or (LNext = 'n') or (LNext = '.') or CharInSet(LNext, ['+', '-']);
+    // If followed by '.', it might be an invalid number like "+.5" - treat as number to get proper error
+    if IsDigit(LNext) or (LNext = 'i') or (LNext = 'n') or (LNext = '.') then
+      Result := True
+    // If followed by another sign, check if it's an invalid number like "++99" (sign sign digit)
+    // vs a valid bare key like "--" or "+-" (just signs)
+    else if CharInSet(LNext, ['+', '-']) then
+    begin
+      // Look at the character after the second sign
+      var LThird := GetLookahead(2);
+      // If followed by digit or dot, it's an invalid number like "++99" or "+-5"
+      Result := IsDigit(LThird) or (LThird = '.');
+    end
+    else
+      Result := False;  // It's a bare key like "-key" or just "-"
   end
   else
     Result := False;
