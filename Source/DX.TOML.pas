@@ -537,6 +537,7 @@ type
   TToml = class
   private
     FValues: TObjectDictionary<string, TTomlValue>;
+    FIsInline: Boolean;
 
     function GetValue(const AKey: string): TTomlValue;
     function GetKeys: TArray<string>;
@@ -611,6 +612,7 @@ type
 
     property Values[const AKey: string]: TTomlValue read GetValue; default;
     property Keys: TArray<string> read GetKeys;
+    property IsInline: Boolean read FIsInline write FIsInline;
   end;
 
   /// <summary>AST to DOM converter (internal)</summary>
@@ -2606,6 +2608,10 @@ begin
     begin
       Advance;
       SkipTrivia;
+
+      // TOML spec: "Inline tables do not allow trailing commas"
+      if Match(tkRightBrace) then
+        Error('Trailing comma not allowed in inline table');
     end
     else if not Match(tkRightBrace) then
       Error('Expected comma or }');
@@ -3387,6 +3393,7 @@ var
   LKeyValue: TTomlSyntaxNode;
 begin
   LTable := TToml.Create;
+  LTable.IsInline := True;  // Mark as inline table for immutability
 
   for LKeyValue in ANode.KeyValues do
   begin
