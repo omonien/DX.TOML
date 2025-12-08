@@ -2189,17 +2189,60 @@ begin
     end
     else
     begin
-      // Normalize line endings: CRLF -> LF
-      if LChar = CH_CR then
+      // Validate control characters
+      // Control characters (U+0000-U+001F except tab, and U+007F) are not allowed
+      // TAB (0x09) is allowed in all strings (literal and basic, single and multiline)
+      var LOrd := Ord(LChar);
+      if (LOrd <= 31) or (LOrd = 127) then
       begin
-        var j := i;
-        if SkipCRLF(j, AText) then
+        // TAB is always allowed
+        if LChar = CH_TAB then
         begin
-          // Skip the CR, the LF will be added in the next iteration
-          i := j;
-          Continue;
+          // Allowed everywhere
+        end
+        // In multiline strings, allow LF and CRLF
+        else if LIsMultiline then
+        begin
+          if LChar = CH_LF then
+          begin
+            // Allowed in multiline strings
+          end
+          else if LChar = CH_CR then
+          begin
+            // CR only allowed as part of CRLF
+            var j := i;
+            if SkipCRLF(j, AText) then
+            begin
+              // Skip the CR, the LF will be added in the next iteration
+              i := j;
+              Continue;
+            end
+            else
+            begin
+              // Standalone CR is not allowed
+              raise ETomlParserException.Create(
+                Format('Control character 0x%2.2X is not allowed in strings', [LOrd]),
+                TTomlPosition.Create(1, 1, 0));
+            end;
+          end
+          else
+          begin
+            // Other control characters not allowed in multiline strings
+            raise ETomlParserException.Create(
+              Format('Control character 0x%2.2X is not allowed in strings', [LOrd]),
+              TTomlPosition.Create(1, 1, 0));
+          end;
+        end
+        else
+        begin
+          // In single-line strings, only TAB is allowed (already handled above)
+          // All other control characters are forbidden
+          raise ETomlParserException.Create(
+            Format('Control character 0x%2.2X is not allowed in strings', [LOrd]),
+            TTomlPosition.Create(1, 1, 0));
         end;
       end;
+
       Result := Result + LChar;
     end;
 
