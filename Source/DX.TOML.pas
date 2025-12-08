@@ -3220,10 +3220,29 @@ begin
           LCurrentTable := LTable;
 
           // Navigate to parent tables, creating them if needed
+          // Special case: if a parent is an array (from prior [[parent]]),
+          // navigate to the last element of that array
           for i := 0 to LTableSyntax.Key.Segments.Count - 2 do
           begin
             LKey := LTableSyntax.Key.Segments[i];
-            LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+
+            // Check if this key is an array (from a previous [[key]])
+            var LValue: TTomlValue;
+            if LCurrentTable.TryGetValue(LKey, LValue) and (LValue.Kind = tvkArray) then
+            begin
+              // Navigate to the last table in the array
+              var LArray := LValue.AsArray;
+              if (LArray.Count = 0) or (LArray[LArray.Count - 1].Kind <> tvkTable) then
+                raise ETomlParserException.Create(
+                  Format('Cannot navigate through array "%s" - last element is not a table', [LKey]),
+                  TTomlPosition.Create(1, 1, 0));
+              LCurrentTable := LArray[LArray.Count - 1].AsTable;
+            end
+            else
+            begin
+              // Regular table navigation
+              LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+            end;
           end;
 
           // Get or create the array for the final segment
