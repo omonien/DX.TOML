@@ -1183,24 +1183,58 @@ begin
       Advance;
     end;
 
-    // Validate hex/octal/binary digits
+    // Validate hex/octal/binary format and digits
+    // Check for incomplete number (just "0x", "0o", "0b" with no digits)
+    if Length(LText) < 3 then
+    begin
+      var LNumberType: string;
+      case LPrefix of
+        'x': LNumberType := 'hex';
+        'o': LNumberType := 'octal';
+        'b': LNumberType := 'binary';
+      end;
+      raise ETomlParserException.Create(
+        Format('Incomplete %s number: must have at least one digit after prefix', [LNumberType]),
+        LStart);
+    end;
+
+    // Check for leading underscore after prefix (e.g., 0x_123)
+    if LText[3] = '_' then
+      raise ETomlParserException.Create('Underscore cannot immediately follow number prefix', LStart);
+
+    // Check for trailing underscore
+    if LText[Length(LText)] = '_' then
+      raise ETomlParserException.Create('Number cannot end with underscore', LStart);
+
+    // Validate each character
+    var LHasDigit := False;
     for i := 3 to Length(LText) do
     begin
       if LText[i] = '_' then
+      begin
+        // Check for consecutive underscores
+        if (i < Length(LText)) and (LText[i + 1] = '_') then
+          raise ETomlParserException.Create('Numbers cannot have consecutive underscores', LStart);
         Continue;
+      end;
 
+      LHasDigit := True;
       case LPrefix of
         'x': // Hex: 0-9, A-F, a-f
           if not CharInSet(LText[i], ['0'..'9', 'A'..'F', 'a'..'f']) then
-            raise Exception.Create(Format('Invalid hex digit: %s', [LText[i]]));
+            raise ETomlParserException.Create(Format('Invalid hex digit: %s', [LText[i]]), LStart);
         'o': // Octal: 0-7
           if not CharInSet(LText[i], ['0'..'7']) then
-            raise Exception.Create(Format('Invalid octal digit: %s', [LText[i]]));
+            raise ETomlParserException.Create(Format('Invalid octal digit: %s', [LText[i]]), LStart);
         'b': // Binary: 0-1
           if not CharInSet(LText[i], ['0'..'1']) then
-            raise Exception.Create(Format('Invalid binary digit: %s', [LText[i]]));
+            raise ETomlParserException.Create(Format('Invalid binary digit: %s', [LText[i]]), LStart);
       end;
     end;
+
+    // Ensure we have at least one valid digit (not just underscores)
+    if not LHasDigit then
+      raise ETomlParserException.Create('Number must contain at least one digit', LStart);
   end
   else
   begin
