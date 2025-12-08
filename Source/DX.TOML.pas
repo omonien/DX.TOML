@@ -1396,6 +1396,89 @@ begin
     end;
   end;
 
+  // Validate number format (only for integers and floats, not dates or special bases)
+  if (LKind = tkInteger) or (LKind = tkFloat) then
+  begin
+    var LValidationText := LText;
+    // Remove sign for validation
+    if (Length(LValidationText) > 0) and CharInSet(LValidationText[1], ['+', '-']) then
+      Delete(LValidationText, 1, 1);
+
+    // Skip validation for hex/octal/binary numbers (they have different rules)
+    if (Length(LValidationText) >= 2) and (LValidationText[1] = '0') and
+       CharInSet(LValidationText[2], ['x', 'o', 'b']) then
+    begin
+      // Hex/octal/binary - these are validated separately in the scanning code
+      // Don't apply decimal/exponent rules to them
+    end
+    else
+    begin
+      // Check for various invalid patterns in decimal numbers
+      for i := 1 to Length(LValidationText) do
+      begin
+        var LChar := LValidationText[i];
+
+      // Check for leading underscore (e.g., _123, 1e_23)
+      if (LChar = '_') and (i = 1) then
+        raise ETomlParserException.Create('Numbers cannot start with underscore', LStart);
+
+      // Check for trailing underscore (e.g., 123_, 1e23_)
+      if (LChar = '_') and (i = Length(LValidationText)) then
+        raise ETomlParserException.Create('Numbers cannot end with underscore', LStart);
+
+      // Check for double underscore (e.g., 1__000)
+      if (LChar = '_') and (i < Length(LValidationText)) and (LValidationText[i + 1] = '_') then
+        raise ETomlParserException.Create('Numbers cannot have consecutive underscores', LStart);
+
+      // Check for underscore after prefix (e.g., 0x_123, 0b_101)
+      if (LChar = '_') and (i = 3) and (Length(LValidationText) >= 2) and
+         (LValidationText[1] = '0') and CharInSet(LValidationText[2], ['x', 'o', 'b']) then
+        raise ETomlParserException.Create('Underscore cannot follow number prefix', LStart);
+
+      // Check for decimal point without following digits (e.g., 1.)
+      if (LChar = '.') then
+      begin
+        if (i = Length(LValidationText)) or not CharInSet(LValidationText[i + 1], ['0'..'9']) then
+          raise ETomlParserException.Create('Decimal point must be followed by digits', LStart);
+      end;
+
+      // Check for exponent without following digits (e.g., 1e, 1e+)
+      if CharInSet(LChar, ['e', 'E']) then
+      begin
+        var LNextIdx := i + 1;
+        // Skip optional sign
+        if (LNextIdx <= Length(LValidationText)) and CharInSet(LValidationText[LNextIdx], ['+', '-']) then
+          Inc(LNextIdx);
+        // Check for digit
+        if (LNextIdx > Length(LValidationText)) or not CharInSet(LValidationText[LNextIdx], ['0'..'9']) then
+          raise ETomlParserException.Create('Exponent must be followed by digits', LStart);
+      end;
+
+      // Check for underscore before/after decimal point (e.g., 1_.0, 1._0)
+      if (LChar = '.') then
+      begin
+        if (i > 1) and (LValidationText[i - 1] = '_') then
+          raise ETomlParserException.Create('Underscore cannot precede decimal point', LStart);
+        if (i < Length(LValidationText)) and (LValidationText[i + 1] = '_') then
+          raise ETomlParserException.Create('Underscore cannot follow decimal point', LStart);
+      end;
+
+      // Check for underscore before/after exponent (e.g., 1_e2, 1e_2)
+      if CharInSet(LChar, ['e', 'E']) then
+      begin
+        if (i > 1) and (LValidationText[i - 1] = '_') then
+          raise ETomlParserException.Create('Underscore cannot precede exponent', LStart);
+        var LNextIdx := i + 1;
+        // Skip optional sign
+        if (LNextIdx <= Length(LValidationText)) and CharInSet(LValidationText[LNextIdx], ['+', '-']) then
+          Inc(LNextIdx);
+        if (LNextIdx <= Length(LValidationText)) and (LValidationText[LNextIdx] = '_') then
+          raise ETomlParserException.Create('Underscore cannot follow exponent', LStart);
+      end;
+      end;  // end for loop
+    end;  // end else (decimal validation)
+  end;  // end if (tkInteger or tkFloat)
+
   FTokens.Add(TTomlToken.Create(LKind, LText, LStart));
 end;
 
