@@ -933,7 +933,17 @@ begin
   // Read until end of line
   while not IsEof and not CharInSet(GetCurrentChar, [#10, #13]) do
   begin
-    LText := LText + GetCurrentChar;
+    var LChar := GetCurrentChar;
+
+    // Validate control characters in comments
+    // TAB (0x09) is allowed, but other control chars (0x00-0x1F except TAB, and 0x7F) are not
+    var LOrd := Ord(LChar);
+    if ((LOrd <= 31) or (LOrd = 127)) and (LChar <> CH_TAB) then
+      raise ETomlParserException.Create(
+        Format('Control character 0x%2.2X is not allowed in comments', [LOrd]),
+        LStart);
+
+    LText := LText + LChar;
     Advance;
   end;
 
@@ -1528,7 +1538,17 @@ begin
 
   while not IsEof and IsBareKeyChar(GetCurrentChar) do
   begin
-    LText := LText + GetCurrentChar;
+    var LChar := GetCurrentChar;
+
+    // Validate control characters in bare keys
+    // Control characters (0x00-0x1F and 0x7F) are not allowed in bare keys
+    var LOrd := Ord(LChar);
+    if (LOrd <= 31) or (LOrd = 127) then
+      raise ETomlParserException.Create(
+        Format('Control character 0x%2.2X is not allowed in bare keys', [LOrd]),
+        LStart);
+
+    LText := LText + LChar;
     Advance;
   end;
 
