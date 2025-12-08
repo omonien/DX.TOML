@@ -2153,18 +2153,32 @@ begin
       if LIsMultiline then
       begin
         // For multiline strings, need 3 consecutive delimiters
-        if (i + 2 <= Length(AText)) and
-           (AText[i + 1] = LDelimiter) and
-           (AText[i + 2] = LDelimiter) then
+        // But if there are 4+, the extras are content
+        var LQuoteCount := 0;
+        var j := i;
+        while (j <= Length(AText)) and (AText[j] = LDelimiter) do
         begin
-          // Found closing """
+          Inc(LQuoteCount);
+          Inc(j);
+        end;
+
+        if LQuoteCount >= 3 then
+        begin
+          // Found closing delimiter (possibly with extra quotes as content)
+          // Add any extra quotes (beyond the closing 3) to result
+          for var k := 1 to LQuoteCount - 3 do
+            Result := Result + LDelimiter;
+
+          // Stop - the last 3 quotes are the closing delimiter
           LInString := False;
-          Inc(i, 2);  // Skip the next two delimiters
+          Inc(i, LQuoteCount - 1);  // Skip all quotes (will be incremented by 1 more at end of loop)
         end
         else
         begin
-          // Single or double quote inside multiline string - include it
-          Result := Result + LChar;
+          // Less than 3 consecutive quotes - include them as content
+          for var k := 1 to LQuoteCount do
+            Result := Result + LDelimiter;
+          Inc(i, LQuoteCount - 1);  // Skip processed quotes (will be incremented by 1 more)
         end;
       end
       else
