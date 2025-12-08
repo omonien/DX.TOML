@@ -758,7 +758,9 @@ end;
 
 function TTomlLexer.IsBareKeyChar(AChar: Char): Boolean;
 begin
-  Result := AChar.IsLetterOrDigit or (AChar = '_') or (AChar = '-');
+  // TOML spec: bare keys may only contain ASCII letters, digits, underscores, and hyphens
+  // A-Z, a-z, 0-9, _, -
+  Result := CharInSet(AChar, ['A'..'Z', 'a'..'z', '0'..'9', '_', '-']);
 end;
 
 function TTomlLexer.IsDigit(AChar: Char): Boolean;
@@ -1874,7 +1876,9 @@ begin
       if IsBareKeyChar(LChar) then
         ScanBareKeyOrKeyword
       else
-        Advance;  // Skip unknown character
+        raise ETomlParserException.Create(
+          Format('Unexpected character: "%s" (0x%2.2X)', [LChar, Ord(LChar)]),
+          CreatePosition);
     end;
   end;
 
