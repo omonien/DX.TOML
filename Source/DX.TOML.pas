@@ -793,8 +793,9 @@ begin
     LNext := GetLookahead(1);
     // If followed by digit, it's a number
     // If followed by 'i' (inf) or 'n' (nan), it's a number
+    // If followed by '.' or another sign it might be an invalid number like "+.5" or "++99" - treat as number to get proper error
     // Otherwise it's a bare key like "-key"
-    Result := IsDigit(LNext) or (LNext = 'i') or (LNext = 'n');
+    Result := IsDigit(LNext) or (LNext = 'i') or (LNext = 'n') or (LNext = '.') or CharInSet(LNext, ['+', '-']);
   end
   else
     Result := False;
@@ -1228,6 +1229,14 @@ begin
       LKind := tkFloat;
       FTokens.Add(TTomlToken.Create(LKind, LText, LStart));
       Exit;
+    end
+    else
+    begin
+      // After sign, must have a digit (not a dot or other character)
+      if not IsDigit(GetCurrentChar) then
+        raise ETomlParserException.Create(
+          'Number with sign must be followed by digit, not: ' + GetCurrentChar,
+          LStart);
     end;
   end;
 
@@ -1534,8 +1543,13 @@ begin
         raise ETomlParserException.Create('Underscore cannot follow number prefix', LStart);
 
       // Check for decimal point without following digits (e.g., 1.)
+      // Also check for decimal point without preceding digits (e.g., .5)
       if (LChar = '.') then
       begin
+        // Must have at least one digit before decimal point
+        if i = 1 then
+          raise ETomlParserException.Create('Decimal point must be preceded by at least one digit', LStart);
+        // Must have digit after decimal point
         if (i = Length(LValidationText)) or not CharInSet(LValidationText[i + 1], ['0'..'9']) then
           raise ETomlParserException.Create('Decimal point must be followed by digits', LStart);
       end;
