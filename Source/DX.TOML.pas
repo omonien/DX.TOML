@@ -1124,9 +1124,16 @@ begin
 
       // If we found 3+ quotes, handle based on count:
       // - Exactly 3: closing delimiter
-      // - 4+: extra quotes are content, last 3 are closing delimiter
+      // - 4-5: 1-2 content quotes, last 3 are closing delimiter
+      // - 6+: ERROR - max 2 quotes allowed before closing delimiter
       if LQuoteCount >= 3 then
       begin
+        // TOML spec: At most 2 quotes can appear before the closing delimiter
+        if LQuoteCount - 3 > 2 then
+          raise ETomlParserException.Create(
+            Format('Too many quotes in multiline string: found %d consecutive quotes (max 5: 2 content + 3 closing)', [LQuoteCount]),
+            LStart);
+
         // Add any extra quotes (beyond the closing 3) as content
         for var i := 1 to LQuoteCount - 3 do
         begin
