@@ -621,7 +621,9 @@ type
     class function ConvertValue(ANode: TTomlSyntaxNode): TTomlValue;
     class function ConvertArray(ANode: TTomlArraySyntax): TTomlArray;
     class function ConvertInlineTable(ANode: TTomlInlineTableSyntax): TToml;
-    class procedure ApplyKeyValue(ATable: TToml; AKeyValue: TTomlKeyValueSyntax);
+    class procedure ApplyKeyValue(ATable: TToml; AKeyValue: TTomlKeyValueSyntax;
+      const AContextPath: string = ''; AExplicitTables: TList<string> = nil;
+      AImplicitTables: TList<string> = nil);
     class function ParseInteger(const AText: string): Int64;
     class function ParseFloat(const AText: string): Double;
     class function ParseDateTime(const AText: string): TDateTime;
@@ -3448,19 +3450,38 @@ begin
   end;
 end;
 
-class procedure TTomlDomBuilder.ApplyKeyValue(ATable: TToml; AKeyValue: TTomlKeyValueSyntax);
+class procedure TTomlDomBuilder.ApplyKeyValue(
+  ATable: TToml;
+  AKeyValue: TTomlKeyValueSyntax;
+  const AContextPath: string = '';
+  AExplicitTables: TList<string> = nil;
+  AImplicitTables: TList<string> = nil);
 var
   LKey: string;
   LValue: TTomlValue;
   LCurrentTable: TToml;
+  LFullPath: string;
   i: Integer;
 begin
   LCurrentTable := ATable;
+  LFullPath := AContextPath;  // Start with context path
 
   // Navigate to the correct table using dotted key
   for i := 0 to AKeyValue.Key.Segments.Count - 2 do
   begin
     LKey := AKeyValue.Key.Segments[i];
+
+    // Build full path for this segment
+    if LFullPath <> '' then
+      LFullPath := LFullPath + '.' + LKey
+    else
+      LFullPath := LKey;
+
+    // Check if this path was explicitly defined as a table header
+    if (AExplicitTables <> nil) and AExplicitTables.Contains(LFullPath) then
+      raise ETomlParserException.Create(
+        Format('Cannot extend table [%s] using dotted keys after it was explicitly defined', [LFullPath]),
+        TTomlPosition.Create(1, 1, 0));
 
     // Check if trying to extend an inline table
     if LCurrentTable.ContainsKey(LKey) then
@@ -3480,7 +3501,12 @@ begin
           TTomlPosition.Create(1, 1, 0));
     end
     else
+    begin
+      // Create the table and track it as implicitly defined
       LCurrentTable := LCurrentTable.GetOrCreateTable(LKey);
+      if (AImplicitTables <> nil) and (AImplicitTables.IndexOf(LFullPath) < 0) then
+        AImplicitTables.Add(LFullPath);
+    end;
   end;
 
   // Set the final value
@@ -3506,12 +3532,14 @@ var
   LKey: string;
   LFullTableName: string;
   i: Integer;
-  LDefinedTables: TList<string>;
-  LLastArrayTable: TToml;  // Track last table added to an array of tables
-  LLastArrayPath: string;  // Track the path of the last array
+  LDefinedTables: TList<string>;       // Explicitly defined tables via [table]
+  LImplicitTables: TList<string>;      // Implicitly defined tables via dotted keys
+  LLastArrayTable: TToml;              // Track last table added to an array of tables
+  LLastArrayPath: string;              // Track the path of the last array
 begin
   LTable := TToml.Create;
   LDefinedTables := TList<string>.Create;
+  LImplicitTables := TList<string>.Create;
   LLastArrayTable := nil;
   LLastArrayPath := '';
   try
@@ -3519,7 +3547,7 @@ begin
     for LKeyValue in ADocument.KeyValues do
     begin
       if LKeyValue is TTomlKeyValueSyntax then
-        ApplyKeyValue(LTable, TTomlKeyValueSyntax(LKeyValue));
+        ApplyKeyValue(LTable, TTomlKeyValueSyntax(LKeyValue), '', LDefinedTables, LImplicitTables);
     end;
 
     // Process tables
@@ -3581,6 +3609,35 @@ begin
 
           // Get or create the array for the final segment
           LKey := LTableSyntax.Key.Segments[LTableSyntax.Key.Segments.Count - 1];
+
+          // Check if key exists and validate it's compatible with array-of-tables
+          if LCurrentTable.ContainsKey(LKey) then
+          begin
+            var LExisting: TTomlValue;
+            if LCurrentTable.TryGetValue(LKey, LExisting) then
+            begin
+              if LExisting.Kind <> tvkArray then
+                raise ETomlParserException.Create(
+                  Format('Cannot define [[%s]] - key "%s" is already defined as non-array', [LFullTableName, LKey]),
+                  TTomlPosition.Create(1, 1, 0));
+
+              // If it IS an array, check if it's compatible with array-of-tables
+              // Arrays created via direct assignment (fruit = [] or fruit = [1,2,3])
+              // cannot be used with [[array]] syntax
+              var LExistingArray := LExisting.AsArray;
+              if LExistingArray.Count = 0 then
+                // Empty array was created via direct assignment (fruit = [])
+                raise ETomlParserException.Create(
+                  Format('Cannot convert array "%s" to array-of-tables - it was defined via direct assignment', [LKey]),
+                  TTomlPosition.Create(1, 1, 0))
+              else if LExistingArray[0].Kind <> tvkTable then
+                // Array contains non-table values
+                raise ETomlParserException.Create(
+                  Format('Cannot convert array "%s" to array-of-tables - it contains non-table values', [LKey]),
+                  TTomlPosition.Create(1, 1, 0));
+            end;
+          end;
+
           var LArray: TTomlArray := LCurrentTable.GetOrCreateArray(LKey);
 
           // Create a new table for this array element
@@ -3595,7 +3652,7 @@ begin
           for LKeyValue in LTableSyntax.KeyValues do
           begin
             if LKeyValue is TTomlKeyValueSyntax then
-              ApplyKeyValue(LNewTable, TTomlKeyValueSyntax(LKeyValue));
+              ApplyKeyValue(LNewTable, TTomlKeyValueSyntax(LKeyValue), LFullTableName, LDefinedTables, LImplicitTables);
           end;
         end
         else
@@ -3637,10 +3694,16 @@ begin
           else
           begin
             // Regular table definition
-            // Check if table was already defined
+            // Check if table was already explicitly defined
             if LDefinedTables.Contains(LFullTableName) then
               raise ETomlParserException.Create(
                 Format('Table [%s] is already defined', [LFullTableName]),
+                TTomlPosition.Create(1, 1, 0));
+
+            // Check if table was implicitly defined via dotted keys
+            if LImplicitTables.Contains(LFullTableName) then
+              raise ETomlParserException.Create(
+                Format('Cannot define table [%s] explicitly - it was already implicitly defined via dotted keys', [LFullTableName]),
                 TTomlPosition.Create(1, 1, 0));
 
             LDefinedTables.Add(LFullTableName);
@@ -3681,7 +3744,7 @@ begin
           for LKeyValue in LTableSyntax.KeyValues do
           begin
             if LKeyValue is TTomlKeyValueSyntax then
-              ApplyKeyValue(LCurrentTable, TTomlKeyValueSyntax(LKeyValue));
+              ApplyKeyValue(LCurrentTable, TTomlKeyValueSyntax(LKeyValue), LFullTableName, LDefinedTables, LImplicitTables);
           end;
         end;
       end;
@@ -3690,6 +3753,7 @@ begin
     Result := LTable;
   finally
     LDefinedTables.Free;
+    LImplicitTables.Free;
   end;
 end;
 
