@@ -188,6 +188,7 @@ type
     procedure ScanMultiLineString(ADelimiter: Char);
     procedure ScanNumber;
     procedure ScanBareKeyOrKeyword;
+    procedure ValidateDateTimeFormat(const AText: string; AKind: TTomlTokenKind; const APos: TTomlPosition);
 
     function IsWhitespace(AChar: Char): Boolean;
     function IsBareKeyChar(AChar: Char): Boolean;
@@ -1606,7 +1607,151 @@ begin
     end;  // end else (decimal validation)
   end;  // end if (tkInteger or tkFloat)
 
+  // Validate DateTime/Date/Time formats
+  if LKind in [tkDateTime, tkDate, tkTime] then
+  begin
+    ValidateDateTimeFormat(LText, LKind, LStart);
+  end;
+
   FTokens.Add(TTomlToken.Create(LKind, LText, LStart));
+end;
+
+procedure TTomlLexer.ValidateDateTimeFormat(const AText: string; AKind: TTomlTokenKind; const APos: TTomlPosition);
+var
+  LParts: TArray<string>;
+  LDatePart, LTimePart, LOffsetPart: string;
+  LValue: Integer;
+
+  function ValidateComponent(const AComponent, AName: string; AMinDigits, AMaxDigits, AMinValue, AMaxValue: Integer): Boolean;
+  begin
+    Result := False;
+
+    // Check digit count
+    if (Length(AComponent) < AMinDigits) or (Length(AComponent) > AMaxDigits) then
+      raise ETomlParserException.Create(
+        Format('%s must be exactly %d digits (got %d)', [AName, AMinDigits, Length(AComponent)]),
+        APos);
+
+    // Check all characters are digits
+    for var I := 1 to Length(AComponent) do
+      if not CharInSet(AComponent[I], ['0'..'9']) then
+        raise ETomlParserException.Create(
+          Format('%s contains non-digit character', [AName]),
+          APos);
+
+    // Check numeric range
+    if not TryStrToInt(AComponent, LValue) or (LValue < AMinValue) or (LValue > AMaxValue) then
+      raise ETomlParserException.Create(
+        Format('%s must be between %d and %d (got %d)', [AName, AMinValue, AMaxValue, LValue]),
+        APos);
+
+    Result := True;
+  end;
+
+begin
+  case AKind of
+    tkDate:
+      begin
+        // Format: YYYY-MM-DD
+        LParts := AText.Split(['-']);
+        if Length(LParts) <> 3 then
+          raise ETomlParserException.Create('Invalid date format', APos);
+
+        ValidateComponent(LParts[0], 'Year', 4, 4, 0, 9999);
+        ValidateComponent(LParts[1], 'Month', 2, 2, 1, 12);
+        ValidateComponent(LParts[2], 'Day', 2, 2, 1, 31);
+      end;
+
+    tkTime:
+      begin
+        // Format: HH:MM:SS or HH:MM:SS.ffffff
+        var LDotPos := Pos('.', AText);
+        if LDotPos > 0 then
+          LTimePart := Copy(AText, 1, LDotPos - 1)
+        else
+          LTimePart := AText;
+
+        LParts := LTimePart.Split([':']);
+        if Length(LParts) <> 3 then
+          raise ETomlParserException.Create('Invalid time format', APos);
+
+        ValidateComponent(LParts[0], 'Hour', 2, 2, 0, 23);
+        ValidateComponent(LParts[1], 'Minute', 2, 2, 0, 59);
+        ValidateComponent(LParts[2], 'Second', 2, 2, 0, 60);  // Allow 60 for leap seconds
+      end;
+
+    tkDateTime:
+      begin
+        // Format: YYYY-MM-DD[T| ]HH:MM:SS[.ffffff][Z|+HH:MM|-HH:MM]
+        // Split date and time parts
+        var LUpperText := UpperCase(AText);
+        var LSepPos := Pos('T', LUpperText);
+        if LSepPos = 0 then
+          LSepPos := Pos(' ', AText);
+
+        if LSepPos = 0 then
+          raise ETomlParserException.Create('Invalid datetime format', APos);
+
+        LDatePart := Copy(AText, 1, LSepPos - 1);
+        LTimePart := Copy(AText, LSepPos + 1, Length(AText) - LSepPos);
+
+        // Validate date part
+        LParts := LDatePart.Split(['-']);
+        if Length(LParts) <> 3 then
+          raise ETomlParserException.Create('Invalid date part in datetime', APos);
+
+        ValidateComponent(LParts[0], 'Year', 4, 4, 0, 9999);
+        ValidateComponent(LParts[1], 'Month', 2, 2, 1, 12);
+        ValidateComponent(LParts[2], 'Day', 2, 2, 1, 31);
+
+        // Extract time and offset parts
+        LOffsetPart := '';
+        var LUpperTime := UpperCase(LTimePart);
+        if Pos('Z', LUpperTime) > 0 then
+        begin
+          LOffsetPart := 'Z';
+          LTimePart := Copy(LTimePart, 1, Pos('Z', LUpperTime) - 1);
+        end
+        else if Pos('+', LTimePart) > 0 then
+        begin
+          var LPlusPos := Pos('+', LTimePart);
+          LOffsetPart := Copy(LTimePart, LPlusPos, Length(LTimePart) - LPlusPos + 1);
+          LTimePart := Copy(LTimePart, 1, LPlusPos - 1);
+        end
+        else if LastDelimiter('-', LTimePart) > Pos('-', LDatePart) then
+        begin
+          var LMinusPos := LastDelimiter('-', LTimePart);
+          LOffsetPart := Copy(LTimePart, LMinusPos, Length(LTimePart) - LMinusPos + 1);
+          LTimePart := Copy(LTimePart, 1, LMinusPos - 1);
+        end;
+
+        // Validate time part (without fractional seconds)
+        var LDotPos := Pos('.', LTimePart);
+        if LDotPos > 0 then
+          LTimePart := Copy(LTimePart, 1, LDotPos - 1);
+
+        LParts := LTimePart.Split([':']);
+        if Length(LParts) <> 3 then
+          raise ETomlParserException.Create('Invalid time part in datetime', APos);
+
+        ValidateComponent(LParts[0], 'Hour', 2, 2, 0, 23);
+        ValidateComponent(LParts[1], 'Minute', 2, 2, 0, 59);
+        ValidateComponent(LParts[2], 'Second', 2, 2, 0, 60);
+
+        // Validate offset if present
+        if (LOffsetPart <> '') and (LOffsetPart <> 'Z') then
+        begin
+          // Remove leading +/-
+          LOffsetPart := Copy(LOffsetPart, 2, Length(LOffsetPart) - 1);
+          LParts := LOffsetPart.Split([':']);
+          if Length(LParts) <> 2 then
+            raise ETomlParserException.Create('Invalid timezone offset format', APos);
+
+          ValidateComponent(LParts[0], 'Offset hour', 2, 2, 0, 24);
+          ValidateComponent(LParts[1], 'Offset minute', 2, 2, 0, 59);
+        end;
+      end;
+  end;
 end;
 
 procedure TTomlLexer.ScanBareKeyOrKeyword;
