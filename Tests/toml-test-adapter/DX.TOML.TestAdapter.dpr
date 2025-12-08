@@ -22,6 +22,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.JSON,
+  System.Math,
   DX.TOML in '..\..\Source\DX.TOML.pas';
 
 type
@@ -60,17 +61,27 @@ begin
       tvkFloat:
         begin
           LResult.AddPair('type', 'float');
-          // Use invariant culture (dot as decimal separator)
+          // Use high precision format to preserve all significant digits
           var LFormatSettings := TFormatSettings.Create('en-US');
           LFormatSettings.DecimalSeparator := '.';
-          LValue := FloatToStr(AValue.AsFloat, LFormatSettings);
-          // Handle special float values
-          if SameText(LValue, 'INF') or SameText(LValue, 'Infinity') then
-            LValue := 'inf'
-          else if SameText(LValue, '-INF') or SameText(LValue, '-Infinity') then
-            LValue := '-inf'
-          else if SameText(LValue, 'NAN') then
-            LValue := 'nan';
+
+          // Check for special float values first
+          if IsNan(AValue.AsFloat) then
+            LValue := 'nan'
+          else if IsInfinite(AValue.AsFloat) then
+          begin
+            if AValue.AsFloat > 0 then
+              LValue := 'inf'
+            else
+              LValue := '-inf';
+          end
+          else
+          begin
+            // Use Format with high precision (17 digits for Double)
+            // This preserves maximum precision without trailing zeros
+            LValue := Format('%.17g', [AValue.AsFloat], LFormatSettings);
+          end;
+
           LResult.AddPair('value', LValue);
         end;
 
