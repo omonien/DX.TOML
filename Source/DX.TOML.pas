@@ -3402,17 +3402,50 @@ class function TTomlDomBuilder.ConvertInlineTable(ANode: TTomlInlineTableSyntax)
 var
   LTable: TToml;
   LKeyValue: TTomlSyntaxNode;
+  LUsedPaths: TStringList;
+  LPath: string;
+  i: Integer;
 begin
   LTable := TToml.Create;
   LTable.IsInline := True;  // Mark as inline table for immutability
+  LUsedPaths := TStringList.Create;
+  try
+    LUsedPaths.Sorted := True;
+    LUsedPaths.Duplicates := dupError;
 
-  for LKeyValue in ANode.KeyValues do
-  begin
-    if LKeyValue is TTomlKeyValueSyntax then
-      ApplyKeyValue(LTable, TTomlKeyValueSyntax(LKeyValue));
+    for LKeyValue in ANode.KeyValues do
+    begin
+      if LKeyValue is TTomlKeyValueSyntax then
+      begin
+        var LKV := TTomlKeyValueSyntax(LKeyValue);
+
+        // Build all intermediate paths for this key-value
+        // For "a.b.c = value", we need to check paths: "a", "a.b", "a.b.c"
+        LPath := '';
+        for i := 0 to LKV.Key.Segments.Count - 1 do
+        begin
+          if i > 0 then
+            LPath := LPath + '.';
+          LPath := LPath + LKV.Key.Segments[i];
+
+          // Check if this path was already used
+          if LUsedPaths.IndexOf(LPath) >= 0 then
+            raise ETomlParserException.Create(
+              Format('Duplicate key "%s" in inline table', [LPath]),
+              TTomlPosition.Create(1, 1, 0));
+        end;
+
+        // Record this path as used
+        LUsedPaths.Add(LPath);
+
+        ApplyKeyValue(LTable, LKV);
+      end;
+    end;
+
+    Result := LTable;
+  finally
+    LUsedPaths.Free;
   end;
-
-  Result := LTable;
 end;
 
 class procedure TTomlDomBuilder.ApplyKeyValue(ATable: TToml; AKeyValue: TTomlKeyValueSyntax);
