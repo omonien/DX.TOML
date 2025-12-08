@@ -194,6 +194,8 @@ type
     function IsDigit(AChar: Char): Boolean;
     /// <summary>Check if current position looks like start of a number (not bare key)</summary>
     function LooksLikeNumber: Boolean;
+    /// <summary>Check if we're in dotted key context (after dot, bracket, or comma)</summary>
+    function InDottedKeyContext: Boolean;
   public
     constructor Create(const ASource: string);
     destructor Destroy; override;
@@ -798,6 +800,107 @@ begin
     Result := False;
 end;
 
+function TTomlLexer.InDottedKeyContext: Boolean;
+var
+  i: Integer;
+  LBracketDepth: Integer;
+  LBraceDepth: Integer;
+begin
+  // Check if we're in a context where dots separate keys (not decimal points)
+  // We need to distinguish:
+  //   - Array context [1, 2.5] - dots are decimals
+  //   - Table header [x.1.2] - dots separate keys
+  //   - Inline table {a=1, b.2=3} - dots separate keys
+  Result := False;
+  LBracketDepth := 0;
+  LBraceDepth := 0;
+
+  // Look back from current position
+  for i := FTokens.Count - 1 downto 0 do
+  begin
+    case FTokens[i].Kind of
+      tkWhitespace, tkComment:
+        Continue;  // Skip whitespace/trivia (but not newlines!)
+
+      tkNewLine:
+        begin
+          // If we hit a newline and we're not inside brackets/braces, stop
+          if (LBracketDepth = 0) and (LBraceDepth = 0) then
+            Exit(False);
+        end;
+
+      tkRightBracket:
+        Inc(LBracketDepth);  // Count backwards
+
+      tkLeftBracket:
+        begin
+          Dec(LBracketDepth);
+          // If this is the opening bracket and we're at depth 0, check context
+          if LBracketDepth < 0 then
+          begin
+            // Check if this is a table header (at start of line) or array
+            // Table headers are at start of line (after newline/start)
+            // Arrays are after = or , or [
+            if i = 0 then
+              Exit(True);  // First token - must be table header
+
+            // Look back one more token
+            var j := i - 1;
+            while (j >= 0) and (FTokens[j].Kind in [tkWhitespace, tkComment]) do
+              Dec(j);
+
+            if j >= 0 then
+            begin
+              case FTokens[j].Kind of
+                tkNewLine:
+                  Exit(True);  // After newline = table header
+                tkEquals, tkComma, tkLeftBracket:
+                  Exit(False);  // Array context
+              end;
+            end;
+
+            Exit(True);  // Default to table header if unclear
+          end;
+        end;
+
+      tkRightBrace:
+        Inc(LBraceDepth);
+
+      tkLeftBrace:
+        begin
+          Dec(LBraceDepth);
+          if LBraceDepth < 0 then
+            Exit(True);  // Inside inline table = dotted key context
+        end;
+
+      tkDot:
+        begin
+          // After a dot, only in key context if not inside array
+          if LBracketDepth = 0 then
+            Exit(True);
+        end;
+
+      tkComma:
+        begin
+          // After comma, only in key context if inside inline table (braces)
+          if (LBracketDepth = 0) and (LBraceDepth > 0) then
+            Exit(True);
+        end;
+
+      tkEquals:
+        // After equals, we're in value context (not key context)
+        Exit(False);
+
+      else
+        // Any other token - if we're inside braces, we're in key context
+        if LBraceDepth > 0 then
+          Exit(True)
+        else
+          Exit(False);
+    end;
+  end;
+end;
+
 procedure TTomlLexer.ScanWhitespace;
 var
   LStart: TTomlPosition;
@@ -1078,27 +1181,34 @@ begin
     end;
 
     // Check for float
-    // But don't consume dot if this looks like a dotted key (e.g., "1.2 = 3")
+    // But don't consume dot if this looks like a dotted key (e.g., "1.2 = 3" or "[x.1.2]")
     if GetCurrentChar = '.' then
     begin
       // Look ahead to see if this is a dotted key or a float
-      // Dotted key pattern: digit+ '.' digit+ whitespace* '='
-      // Float pattern: digit+ '.' digit+ (not followed by '=')
+      // Dotted key pattern: digit+ '.' digit+ whitespace* '=' OR inside brackets/after comma
+      // Float pattern: digit+ '.' digit+ (in value context)
       var LSavedState := SaveState;
       var LIsDottedKey := False;
 
-      // Tentatively consume the dot and digits
-      Advance; // skip dot
-      while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar = '_')) do
-        Advance;
+      // First check: are we in a dotted key context (brackets, after dot, after comma)?
+      if InDottedKeyContext then
+        LIsDottedKey := True
+      else
+      begin
+        // Second check: look ahead for '=' pattern
+        // Tentatively consume the dot and digits
+        Advance; // skip dot
+        while not IsEof and (IsDigit(GetCurrentChar) or (GetCurrentChar = '_')) do
+          Advance;
 
-      // Skip whitespace
-      while not IsEof and CharInSet(GetCurrentChar, [' ', #9]) do
-        Advance;
+        // Skip whitespace
+        while not IsEof and CharInSet(GetCurrentChar, [' ', #9]) do
+          Advance;
 
-      // Check if we see '=' (dotted key) or something else (float)
-      if GetCurrentChar = '=' then
-        LIsDottedKey := True;
+        // Check if we see '=' (dotted key) or something else (float)
+        if GetCurrentChar = '=' then
+          LIsDottedKey := True;
+      end;
 
       // Restore position
       RestoreState(LSavedState);
