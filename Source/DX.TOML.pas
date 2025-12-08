@@ -931,9 +931,24 @@ begin
   Advance;
 
   // Read until end of line
-  while not IsEof and not CharInSet(GetCurrentChar, [#10, #13]) do
+  while not IsEof do
   begin
     var LChar := GetCurrentChar;
+
+    // Stop at end of line (LF or CRLF)
+    if CharInSet(LChar, [CH_LF, CH_CR]) then
+    begin
+      // Validate that CR is part of CRLF, not standalone
+      if LChar = CH_CR then
+      begin
+        // Standalone CR is not allowed in comments
+        if not ((FPosition < Length(FSource)) and (FSource[FPosition + 1] = CH_LF)) then
+          raise ETomlParserException.Create(
+            'Standalone carriage return (CR) is not allowed in comments',
+            LStart);
+      end;
+      Break;  // End of line reached
+    end;
 
     // Validate control characters in comments
     // TAB (0x09) is allowed, but other control chars (0x00-0x1F except TAB, and 0x7F) are not
@@ -959,10 +974,17 @@ begin
   LText := '';
 
   // Handle \r\n or \n
+  // Standalone CR (not followed by LF) is not allowed
   if GetCurrentChar = #13 then
   begin
     LText := LText + GetCurrentChar;
     Advance;
+
+    // CR must be followed by LF
+    if GetCurrentChar <> #10 then
+      raise ETomlParserException.Create(
+        'Standalone carriage return (CR) is not allowed',
+        LStart);
   end;
 
   if GetCurrentChar = #10 then
@@ -1021,7 +1043,19 @@ begin
     end
     else
     begin
-      LText := LText + GetCurrentChar;
+      var LChar := GetCurrentChar;
+
+      // Validate: single-line strings cannot contain unescaped newlines or CR
+      if LChar = CH_CR then
+        raise ETomlParserException.Create(
+          'Carriage return (CR) is not allowed in single-line strings',
+          LStart);
+      if LChar = CH_LF then
+        raise ETomlParserException.Create(
+          'Line feed (LF) is not allowed in single-line strings',
+          LStart);
+
+      LText := LText + LChar;
       Advance;
     end;
   end;
@@ -1121,12 +1155,25 @@ begin
       end
       else
       begin
-        if GetCurrentChar = #10 then
+        var LChar := GetCurrentChar;
+
+        // In multiline strings, validate that CR is only part of CRLF
+        if LChar = CH_CR then
+        begin
+          // Check if CR is followed by LF
+          if not ((FPosition < Length(FSource)) and (FSource[FPosition + 1] = CH_LF)) then
+            raise ETomlParserException.Create(
+              'Standalone carriage return (CR) is not allowed in multiline strings',
+              LStart);
+        end;
+
+        if LChar = CH_LF then
         begin
           Inc(FLine);
           FColumn := 0;  // Will be incremented by Advance
         end;
-        LText := LText + GetCurrentChar;
+
+        LText := LText + LChar;
         Advance;
       end;
     end;
