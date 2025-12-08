@@ -1072,9 +1072,11 @@ var
   LStart: TTomlPosition;
   LText: string;
   LQuoteCount: Integer;
+  LClosed: Boolean;
 begin
   LStart := CreatePosition;
   LText := '';
+  LClosed := False;
 
   // Add opening triple delimiter to text
   LText := LText + GetCurrentChar;
@@ -1120,6 +1122,7 @@ begin
         Advance;
         LText := LText + ADelimiter;
         Advance;
+        LClosed := True;
         Break;
       end
       else
@@ -1178,6 +1181,10 @@ begin
       end;
     end;
   end;
+
+  // Check if string was properly closed
+  if not LClosed then
+    raise ETomlParserException.Create('Unclosed multiline string', LStart);
 
   FTokens.Add(TTomlToken.Create(tkMultiLineString, LText, LStart));
 end;
@@ -2155,7 +2162,6 @@ begin
     '\': Result := '\';
     '"': Result := '"';
     '''': Result := '''';
-    '/': Result := '/';
 
     'u':
       begin
