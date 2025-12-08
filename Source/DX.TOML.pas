@@ -1032,7 +1032,7 @@ begin
   LStart := CreatePosition;
   LText := '';
 
-  // Skip opening triple delimiter
+  // Add opening triple delimiter to text
   LText := LText + GetCurrentChar;
   Advance;
   LText := LText + GetCurrentChar;
@@ -1057,10 +1057,19 @@ begin
       // Restore position
       RestoreState(LSavedState);
 
-      // If we found 3+ quotes, the first 3 are the closing delimiter
+      // If we found 3+ quotes, handle based on count:
+      // - Exactly 3: closing delimiter
+      // - 4+: extra quotes are content, last 3 are closing delimiter
       if LQuoteCount >= 3 then
       begin
-        // Add the 3 closing quotes to text
+        // Add any extra quotes (beyond the closing 3) as content
+        for var i := 1 to LQuoteCount - 3 do
+        begin
+          LText := LText + ADelimiter;
+          Advance;
+        end;
+
+        // Add the 3 closing quotes to text (parser expects delimiters in token)
         LText := LText + ADelimiter;
         Advance;
         LText := LText + ADelimiter;
@@ -1081,13 +1090,35 @@ begin
     end
     else
     begin
-      if GetCurrentChar = #10 then
+      // Handle escape sequences (only in basic strings, not literal strings)
+      if (GetCurrentChar = '\') and (ADelimiter = '"') then
       begin
-        Inc(FLine);
-        FColumn := 0;  // Will be incremented by Advance
+        // Add backslash
+        LText := LText + GetCurrentChar;
+        Advance;
+
+        // Add escaped character (don't interpret it)
+        if not IsEof then
+        begin
+          if GetCurrentChar = #10 then
+          begin
+            Inc(FLine);
+            FColumn := 0;
+          end;
+          LText := LText + GetCurrentChar;
+          Advance;
+        end;
+      end
+      else
+      begin
+        if GetCurrentChar = #10 then
+        begin
+          Inc(FLine);
+          FColumn := 0;  // Will be incremented by Advance
+        end;
+        LText := LText + GetCurrentChar;
+        Advance;
       end;
-      LText := LText + GetCurrentChar;
-      Advance;
     end;
   end;
 
