@@ -682,6 +682,14 @@ constructor TTomlLexer.Create(const ASource: string);
 begin
   inherited Create;
   FSource := ASource;
+
+  // TOML spec: Files must be valid UTF-8
+  // Check for Unicode replacement character (U+FFFD) which indicates encoding errors
+  if Pos(#$FFFD, FSource) > 0 then
+    raise ETomlParserException.Create(
+      'Invalid UTF-8 encoding detected in input file',
+      TTomlPosition.Create(1, 1, 0));
+
   FPosition := 1;  // Delphi strings are 1-based
   FLine := 1;
   FColumn := 1;
