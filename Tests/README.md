@@ -1,32 +1,32 @@
 # DX.TOML Test Suite
 
-Umfassende Test-Suite für die DX.TOML Bibliothek mit DUnitX Framework.
+Comprehensive test suite for the DX.TOML library using the DUnitX framework.
 
-## Projekt öffnen
+## Opening the Project
 
 ```
 Tests/DX.TOML.Tests.dproj
 ```
 
-Öffnen Sie die Projektdatei in Delphi 11.0 Alexandria oder neuer.
+Open the project file in Delphi 11.0 Alexandria or newer.
 
-## Tests ausführen
+## Running Tests
 
-### In der IDE
+### In the IDE
 
-1. Öffnen Sie `DX.TOML.Tests.dproj` in Delphi
-2. Drücken Sie `F9` (Run) oder `Shift+Ctrl+F9` (Run without debugging)
-3. Die Tests werden in der Konsole ausgeführt
+1. Open `DX.TOML.Tests.dproj` in Delphi
+2. Press `F9` (Run) or `Shift+Ctrl+F9` (Run without debugging)
+3. Tests will run in the console
 
-### Mit TestInsight
+### With TestInsight
 
-TestInsight bietet eine grafische Oberfläche für DUnitX Tests:
+TestInsight provides a graphical interface for DUnitX tests:
 
-1. Installieren Sie [TestInsight](https://github.com/project-jedi/testinsight)
-2. Öffnen Sie das Projekt in Delphi
-3. Die TestInsight-Integration wird automatisch aktiviert
+1. Install [TestInsight](https://github.com/project-jedi/testinsight)
+2. Open the project in Delphi
+3. TestInsight integration will be activated automatically
 
-### Kommandozeile
+### Command Line
 
 ```cmd
 cd Tests
@@ -34,26 +34,26 @@ dcc32 -B DX.TOML.Tests.dpr
 ..\Win32\Debug\DX.TOML.Tests.exe
 ```
 
-## Test-Kategorien
+## Test Categories
 
 ### TTomlLexerTests (4 Tests)
-- Tokenisierung
-- String-Parsing
-- Zahlen-Parsing
-- Kommentare
+- Tokenization
+- String parsing
+- Number parsing
+- Comments
 
 ### TTomlParserTests (5 Tests)
-- Key-Value Paare
-- Tabellen
-- Verschachtelte Tabellen
+- Key-value pairs
+- Tables
+- Nested tables
 - Arrays
-- Inline-Tabellen
+- Inline tables
 
 ### TTomlApiTests (4 Tests)
-- TOML → DOM Konvertierung
-- DOM → TOML Serialisierung
-- Round-Trip Tests
-- Validierung
+- TOML → DOM conversion
+- DOM → TOML serialization
+- Round-trip tests
+- Validation
 
 ### TTomlDateTimeTests (4 Tests)
 - Offset DateTime (RFC 3339)
@@ -62,44 +62,49 @@ dcc32 -B DX.TOML.Tests.dpr
 - Local Time
 
 ### TTomlNegativeTests (10 Tests)
-- Ungültige Syntax
-- Doppelte Keys
-- Ungültige Escape-Sequenzen
-- Fehlerhafte Tabellen
-- Gemischte Array-Typen
-- Ungültige DateTime-Werte
-- Nicht geschlossene Strings
-- Ungültige Zahlen
-- Tabellen-Redefinition
-- Ungültige Inline-Tabellen
+- Invalid syntax
+- Duplicate keys
+- Invalid escape sequences
+- Malformed tables
+- Mixed array types
+- Invalid DateTime values
+- Unclosed strings
+- Invalid numbers
+- Table redefinition
+- Invalid inline tables
 
 ### TTomlGoldenFileTests (1+ Tests)
-- Referenz-TOML-Dateien
-- Komplexe Strukturen
-- Real-world Beispiele
+- Reference TOML files
+- Complex structures
+- Real-world examples
 
 ## Golden Files
 
-Die Golden Files befinden sich in `Tests/GoldenFiles/`:
+Golden files are located in `Tests/GoldenFiles/`:
 
-- `example01.toml`, `example02.toml` - Basis-Beispiele
-- `datetime.toml` - DateTime-Formate
-- `strings.toml` - String-Typen
-- `numbers.toml` - Zahlen-Formate
+- `example01.toml`, `example02.toml` - Basic examples
+- `datetime.toml` - DateTime formats
+- `strings.toml` - String types
+- `numbers.toml` - Number formats
 - `arrays.toml` - Arrays
-- `tables.toml` - Tabellen
-- `unicode.toml` - Unicode-Zeichen
-- `escapes.toml` - Escape-Sequenzen
-- `edge-cases.toml` - Grenzfälle
-- `comments.toml` - Kommentare
-- `app-config.toml` - App-Konfiguration
-- `database-config.toml` - Datenbank-Config
-- `web-server.toml` - Webserver-Config
-- `package-meta.toml` - Paket-Metadaten
+- `tables.toml` - Tables
+- `unicode.toml` - Unicode characters
+- `escapes.toml` - Escape sequences
+- `edge-cases.toml` - Edge cases
+- `comments.toml` - Comments
+- `app-config.toml` - Application configuration
+- `database-config.toml` - Database configuration
+- `web-server.toml` - Web server configuration
+- `package-meta.toml` - Package metadata
 
-## toml-test Adapter
+## toml-test Integration
 
-Für die Integration mit der offiziellen [toml-test](https://github.com/BurntSushi/toml-test) Suite:
+For integration with the official [toml-test](https://github.com/BurntSushi/toml-test) suite:
+
+**DX.TOML achieves 100% compliance:**
+- ✅ **185/185 valid tests** (100%) - Correctly parses all valid TOML
+- ✅ **371/371 invalid tests** (100%) - Correctly rejects all invalid TOML
+- 🎉 **556/556 total tests passing**
 
 ```cmd
 cd toml-test-adapter
@@ -107,44 +112,44 @@ build.bat
 toml-test ..\..\Win32\Release\DX.TOML.TestAdapter.exe
 ```
 
-Siehe [toml-test-adapter/README.md](toml-test-adapter/README.md) für Details.
+See [toml-test-adapter/README.md](toml-test-adapter/README.md) for details.
 
-## Konfiguration
+## Configuration
 
-### Output-Pfade
+### Output Paths
 
 - **Executable**: `../$(Platform)/$(Config)/DX.TOML.Tests.exe`
-- **DCU-Dateien**: `./$(Platform)/$(Config)/dcu`
+- **DCU files**: `./$(Platform)/$(Config)/dcu`
 
-### Kommandozeilen-Optionen
+### Command Line Options
 
 ```cmd
 DX.TOML.Tests.exe --help
 ```
 
-Zeigt alle verfügbaren Optionen:
-- `--xml:<filename>` - Erstellt NUnit-XML-Report
-- `--console:quiet` - Reduzierte Konsolenausgabe
-- `--exitbehavior:pause` - Wartet auf Enter-Taste
+Shows all available options:
+- `--xml:<filename>` - Creates NUnit XML report
+- `--console:quiet` - Reduced console output
+- `--exitbehavior:pause` - Waits for Enter key
 
 ## DUnitX Framework
 
-Das Projekt verwendet DUnitX als Submodule:
+The project uses DUnitX as a submodule:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-## Test-Abdeckung
+## Test Coverage
 
-Siehe [../Docs/TEST_COVERAGE.md](../Docs/TEST_COVERAGE.md) für detaillierte Analyse der Test-Abdeckung und Vergleich mit anderen TOML-Implementierungen.
+See [../Docs/TEST_COVERAGE.md](../Docs/TEST_COVERAGE.md) for detailed test coverage analysis and comparison with other TOML implementations.
 
-## Anforderungen
+## Requirements
 
-- Delphi 11.0 Alexandria oder neuer
-- DUnitX (als Submodule enthalten)
+- Delphi 11.0 Alexandria or newer
+- DUnitX (included as submodule)
 - Windows (Win32/Win64)
 
-## Lizenz
+## License
 
-MIT License - siehe [../LICENSE](../LICENSE) für Details
+MIT License - see [../LICENSE](../LICENSE) for details

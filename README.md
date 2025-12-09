@@ -50,12 +50,12 @@ DX.TOML implements the complete TOML v1.0.0 specification.
 
 ## Features
 
-- **Single-unit library** (~2,500 lines) - just add DX.TOML.pas to your project
-- **TOML 1.0.0 compliant** parser and serializer
+- **Single-unit library** (~4,000 lines) - just add DX.TOML.pas to your project
+- **TOML 1.0.0 compliant** parser and serializer - **passes all 556 tests** of the official test suite
 - **Round-trip preservation** of comments, formatting, and whitespace
 - **Three-layer architecture** (AST ≠ DOM ≠ API) unified in one file
 - **Type-safe** with full Delphi generics support
-- **Extensively tested** with DUnitX and golden files
+- **100% spec compliance** - validated against the complete [toml-test](https://github.com/BurntSushi/toml-test) suite (185 valid + 371 invalid tests)
 - **INI adapter** for legacy compatibility (optional, separate unit)
 
 ## Architecture
@@ -64,7 +64,7 @@ DX.TOML follows a clean three-layer design inspired by [Tomlyn](https://github.c
 
 ### Single-Unit Structure
 
-**All functionality in one file** (`DX.TOML.pas`, ~2,500 lines):
+**All functionality in one file** (`DX.TOML.pas`, ~4,000 lines):
 
 1. **Lexer** - Tokenization with position tracking
 2. **AST** - Syntax nodes preserving all formatting details for round-trip
@@ -260,7 +260,11 @@ Test coverage includes:
 
 ### toml-test Integration
 
-DX.TOML includes an adapter for the official [toml-test](https://github.com/BurntSushi/toml-test) suite (278 decoder tests):
+DX.TOML achieves **100% compliance** with the official [toml-test](https://github.com/BurntSushi/toml-test) suite:
+
+- ✅ **185/185 valid tests** (100%) - Correctly parses all valid TOML
+- ✅ **371/371 invalid tests** (100%) - Correctly rejects all invalid TOML
+- 🎉 **556/556 total tests passing**
 
 ```bash
 # Build adapter
@@ -270,6 +274,12 @@ dcc32 -B DX.TOML.TestAdapter.dpr
 # Run toml-test
 toml-test path/to/DX.TOML.TestAdapter.exe
 ```
+
+The implementation validates:
+- All TOML 1.0 syntax rules (strings, numbers, dates, tables, arrays)
+- Unicode handling (UTF-8 validation, escape sequences, surrogate pairs)
+- Edge cases (inline tables, dotted keys, table redefinition)
+- Line ending semantics (LF/CRLF only, standalone CR rejection)
 
 See [Tests/toml-test-adapter/README.md](Tests/toml-test-adapter/README.md) for details.
 

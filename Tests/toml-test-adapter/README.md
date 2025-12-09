@@ -5,18 +5,24 @@ This is an adapter program that enables testing DX.TOML with the official [toml-
 ## What is toml-test?
 
 toml-test is the official language-agnostic test suite for TOML parsers, providing:
-- 278 decoder tests (valid TOML → JSON)
-- 94 encoder tests (JSON → TOML)
-- Both valid and invalid TOML test cases
+- **556 decoder tests** (185 valid + 371 invalid TOML cases)
+- Both valid TOML parsing and invalid TOML rejection tests
+
+**DX.TOML achieves 100% compliance:**
+- ✅ **185/185 valid tests** (100%) - Correctly parses all valid TOML
+- ✅ **371/371 invalid tests** (100%) - Correctly rejects all invalid TOML
+- 🎉 **556/556 total tests passing**
 
 ## How it Works
 
 The adapter implements the toml-test interface:
-1. Reads TOML from **stdin**
+1. Reads TOML from **stdin** (character-by-character to preserve all bytes including standalone CR)
 2. Parses it using DX.TOML
 3. Converts to JSON with type tags
 4. Outputs JSON to **stdout**
 5. Returns exit code **0** for valid TOML, **1** for errors
+
+**Note:** The adapter uses character-by-character reading (`Read(Char)`) instead of line-based reading (`ReadLn`) to preserve standalone CR characters, which are invalid in TOML and must be detected.
 
 ## JSON Format
 
@@ -78,14 +84,23 @@ toml-test -run datetime path\to\DX.TOML.TestAdapter.exe
 toml-test -v path\to\DX.TOML.TestAdapter.exe
 ```
 
-## Expected Results
+## Test Results
 
-A fully TOML 1.0.0 compliant parser should pass all 278 decoder tests. As DX.TOML development progresses, we expect:
+**DX.TOML achieves 100% TOML 1.0.0 specification compliance:**
 
-- **Phase 1**: Basic parsing (strings, integers, booleans, tables)
-- **Phase 2**: Arrays, inline tables, nested structures
-- **Phase 3**: DateTime, float precision, edge cases
-- **Phase 4**: Full specification compliance
+```
+toml-test v2025-04-15: using embedded tests
+  valid tests: 185 passed,  0 failed
+invalid tests: 371 passed,  0 failed
+```
+
+The implementation validates all TOML 1.0 requirements:
+- ✅ All syntax rules (strings, numbers, dates, tables, arrays)
+- ✅ Unicode handling (UTF-8 validation, escape sequences, surrogate pairs)
+- ✅ Edge cases (inline tables, dotted keys, table redefinition)
+- ✅ Line ending semantics (LF/CRLF only, standalone CR rejection)
+- ✅ DateTime validation (RFC 3339 formats, leading zeros, range checking)
+- ✅ Key validation (ASCII-only bare keys, EOL requirements)
 
 ## Manual Testing
 
