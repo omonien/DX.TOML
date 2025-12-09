@@ -1641,8 +1641,6 @@ var
 
   function ValidateComponent(const AComponent, AName: string; AMinDigits, AMaxDigits, AMinValue, AMaxValue: Integer): Boolean;
   begin
-    Result := False;
-
     // Check digit count
     if (Length(AComponent) < AMinDigits) or (Length(AComponent) > AMaxDigits) then
       raise ETomlParserException.Create(
@@ -2516,6 +2514,7 @@ begin
   LInString := False;
   LIsLiteral := False;
   LIsMultiline := False;
+  LDelimiter := #0;  // Initialize to avoid compiler warning
 
   i := 1;
   while i <= Length(AText) do
