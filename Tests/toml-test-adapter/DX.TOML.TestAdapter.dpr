@@ -278,7 +278,6 @@ end;
 { Main Program }
 
 var
-  LInput: TStringList;
   LToml: string;
   LJson: string;
 begin
@@ -288,19 +287,15 @@ begin
   SetTextCodePage(ErrOutput, CP_UTF8);
 
   try
-    // Read TOML from stdin
-    LInput := TStringList.Create;
-    try
-      while not Eof do
-      begin
-        var LLine: string;
-        ReadLn(LLine);
-        LInput.Add(LLine);
-      end;
-
-      LToml := LInput.Text;
-    finally
-      LInput.Free;
+    // Read TOML from stdin character by character to preserve all bytes including standalone CR
+    // We cannot use ReadLn as it strips line endings (CR becomes part of the string)
+    // We use Read(Char) which preserves CR as a character in the string
+    LToml := '';
+    while not Eof do
+    begin
+      var LChar: Char;
+      Read(LChar);
+      LToml := LToml + LChar;
     end;
 
     // Convert to JSON

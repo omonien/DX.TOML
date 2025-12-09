@@ -3192,9 +3192,16 @@ end;
 
 class function TToml.FromFile(const AFileName: string): TToml;
 var
+  LBytes: TBytes;
   LSource: string;
 begin
-  LSource := TFile.ReadAllText(AFileName, TEncoding.UTF8);
+  // Read as binary to preserve all bytes including standalone CR characters
+  // This is critical for proper validation - text-mode readers may normalize line endings
+  LBytes := TFile.ReadAllBytes(AFileName);
+
+  // Convert UTF-8 bytes to string manually
+  LSource := TEncoding.UTF8.GetString(LBytes);
+
   Result := FromString(LSource);
 end;
 
