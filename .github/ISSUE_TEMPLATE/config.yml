@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or Discussion
+    url: https://github.com/omonien/DX.TOML/discussions
+    about: Ask questions or discuss ideas with the community
+  - name: TOML Specification
+    url: https://toml.io/en/v1.0.0
+    about: View the official TOML 1.0.0 specification
