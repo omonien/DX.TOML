@@ -82,3 +82,6 @@ dunitx-results.xml
 toml-test-results.txt
 Tests/TestDebug.dpr
 Tests/nul
+
+# Claude Code local settings
+.claude/settings.local.json
