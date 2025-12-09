@@ -284,12 +284,24 @@ The implementation validates:
 
 See [Tests/toml-test-adapter/README.md](Tests/toml-test-adapter/README.md) for details.
 
+## Contributing
+
+Contributions are welcome! Please see the [Issue Templates](.github/ISSUE_TEMPLATE/) for bug reports and feature requests.
+
+For questions and discussions, use [GitHub Discussions](https://github.com/omonien/DX.TOML/discussions).
+
 ## License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2025 Olaf Monien
 
 ## References
 
 - [TOML Specification v1.0.0](https://toml.io/en/v1.0.0)
 - [Tomlyn (C# inspiration)](https://github.com/xoofx/Tomlyn)
 - [Delphi Style Guide](Docs/Delphi%20Style%20Guide%20EN.md)
+
+## Repository Setup
+
+For maintainers: See [.github/REPOSITORY_SETUP.md](.github/REPOSITORY_SETUP.md) for GitHub repository configuration (topics, discussions, social preview).

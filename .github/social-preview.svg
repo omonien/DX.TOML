@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1280" height="640" viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1280" height="640" fill="#1a1a2e"/>
+
+  <!-- Grid pattern -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#16213e" stroke-width="1" opacity="0.3"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+
+  <!-- Main title -->
+  <text x="640" y="220" font-family="Arial, sans-serif" font-size="96" font-weight="bold" fill="#e94560" text-anchor="middle">
+    DX.TOML
+  </text>
+
+  <!-- Subtitle -->
+  <text x="640" y="280" font-family="Arial, sans-serif" font-size="32" fill="#0f3460" text-anchor="middle">
+    TOML 1.0.0 Parser for Delphi
+  </text>
+
+  <!-- Feature badges -->
+  <g transform="translate(640, 360)">
+    <!-- 100% Compliant badge -->
+    <g transform="translate(-280, 0)">
+      <rect x="-80" y="-25" width="160" height="50" rx="25" fill="#16213e"/>
+      <text x="0" y="8" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#4ecca3" text-anchor="middle">
+        100% Spec
+      </text>
+    </g>
+
+    <!-- Single File badge -->
+    <g transform="translate(0, 0)">
+      <rect x="-80" y="-25" width="160" height="50" rx="25" fill="#16213e"/>
+      <text x="0" y="8" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#4ecca3" text-anchor="middle">
+        Single File
+      </text>
+    </g>
+
+    <!-- No Deps badge -->
+    <g transform="translate(280, 0)">
+      <rect x="-80" y="-25" width="160" height="50" rx="25" fill="#16213e"/>
+      <text x="0" y="8" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#4ecca3" text-anchor="middle">
+        No Deps
+      </text>
+    </g>
+  </g>
+
+  <!-- Stats -->
+  <g transform="translate(640, 480)">
+    <text x="0" y="0" font-family="Arial, sans-serif" font-size="24" fill="#0f3460" text-anchor="middle">
+      556/556 Tests Passing • ~4,000 Lines • MIT License
+    </text>
+  </g>
+
+  <!-- GitHub link -->
+  <text x="640" y="560" font-family="Arial, sans-serif" font-size="20" fill="#666" text-anchor="middle">
+    github.com/omonien/DX.TOML
+  </text>
+
+  <!-- Decorative elements -->
+  <circle cx="120" cy="120" r="8" fill="#e94560" opacity="0.6"/>
+  <circle cx="1160" cy="120" r="8" fill="#4ecca3" opacity="0.6"/>
+  <circle cx="120" cy="520" r="8" fill="#4ecca3" opacity="0.6"/>
+  <circle cx="1160" cy="520" r="8" fill="#e94560" opacity="0.6"/>
+</svg>
