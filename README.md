@@ -51,6 +51,7 @@ DX.TOML implements the complete TOML v1.0.0 specification.
 ## Features
 
 - **Single-unit library** (~4,000 lines) - just add DX.TOML.pas to your project
+- **No external dependencies** - uses only Delphi RTL (System.*, System.Generics.*)
 - **TOML 1.0.0 compliant** parser and serializer - **passes all 556 tests** of the official test suite
 - **Round-trip preservation** of comments, formatting, and whitespace
 - **Three-layer architecture** (AST ≠ DOM ≠ API) unified in one file
