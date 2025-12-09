@@ -8,7 +8,7 @@ echo ========================================
 echo.
 
 REM Run the PowerShell build-and-test script
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0build-and-test.ps1" -SkipTests
+powershell.exe -ExecutionPolicy Bypass -File "%~dp0BuildScripts\build-and-test.ps1" -SkipTests
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -27,5 +27,5 @@ echo To run unit tests:
 echo   Win32\Debug\DX.TOML.Tests.exe
 echo.
 echo To run full build and test:
-echo   powershell -ExecutionPolicy Bypass -File build-and-test.ps1
+echo   powershell -ExecutionPolicy Bypass -File BuildScripts\build-and-test.ps1
 echo.

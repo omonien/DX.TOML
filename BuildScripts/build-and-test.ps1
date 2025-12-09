@@ -18,14 +18,15 @@ Write-InfoMsg "========================================="
 Write-Host ""
 
 $BuildScript = Join-Path $PSScriptRoot "Build-DPROJ.ps1"
+$ProjectRoot = Split-Path $PSScriptRoot -Parent
 
 if (-not (Test-Path $BuildScript)) {
     Write-ErrorMsg "Universal build script not found: $BuildScript"
     exit 1
 }
 
-$TestAdapterProject = "Tests\toml-test-adapter\DX.TOML.TestAdapter.dproj"
-$TestsProject = "Tests\DX.TOML.Tests.dproj"
+$TestAdapterProject = Join-Path $ProjectRoot "Tests\toml-test-adapter\DX.TOML.TestAdapter.dproj"
+$TestsProject = Join-Path $ProjectRoot "Tests\DX.TOML.Tests.dproj"
 
 $BuildFailed = $false
 
@@ -63,9 +64,9 @@ Write-InfoMsg "Running Unit Tests"
 Write-InfoMsg "========================================="
 Write-Host ""
 
-$TestExe = "Win32\Debug\DX.TOML.Tests.exe"
+$TestExe = Join-Path $ProjectRoot "Win32\Debug\DX.TOML.Tests.exe"
 if ($Config -eq "Release") {
-    $TestExe = "Win32\Release\DX.TOML.Tests.exe"
+    $TestExe = Join-Path $ProjectRoot "Win32\Release\DX.TOML.Tests.exe"
 }
 
 if (Test-Path $TestExe) {
@@ -93,7 +94,7 @@ Write-InfoMsg "========================================="
 Write-Host ""
 
 $TomlTest = "C:\tools\toml-test.exe"
-$Adapter = "Tests\toml-test-adapter\DX.TOML.TestAdapter.exe"
+$Adapter = Join-Path $ProjectRoot "Tests\toml-test-adapter\DX.TOML.TestAdapter.exe"
 
 if (-not (Test-Path $TomlTest)) {
     Write-WarningMsg "toml-test not found at: $TomlTest"
