@@ -12,7 +12,7 @@ program DX.TOML.Tests;
     Comprehensive test suite for DX.TOML library using DUnitX framework.
     Tests lexer, parser, AST, DOM, and API functionality.
 
-  Author: DX.TOML Project
+  Copyright (c) 2025 Olaf Monien
   License: MIT
 *******************************************************************************}
 

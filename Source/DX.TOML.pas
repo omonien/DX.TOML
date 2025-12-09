@@ -27,7 +27,7 @@
       end;
     end;
 
-  Author: DX.TOML Project
+  Copyright (c) 2025 Olaf Monien
   License: MIT
 *******************************************************************************}
 unit DX.TOML;
