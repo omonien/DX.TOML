@@ -3193,13 +3193,53 @@ class function TToml.FromFile(const AFileName: string): TToml;
 var
   LBytes: TBytes;
   LSource: string;
+  LBOMSize: Integer;
 begin
   // Read as binary to preserve all bytes including standalone CR characters
   // This is critical for proper validation - text-mode readers may normalize line endings
   LBytes := TFile.ReadAllBytes(AFileName);
 
-  // Convert UTF-8 bytes to string manually
-  LSource := TEncoding.UTF8.GetString(LBytes);
+  // TOML files MUST be UTF-8 encoded (TOML 1.0 specification)
+  // Validate that no non-UTF-8 BOM is present
+  if Length(LBytes) >= 2 then
+  begin
+    // UTF-16 LE BOM (FF FE)
+    if (LBytes[0] = $FF) and (LBytes[1] = $FE) then
+      raise Exception.Create('TOML files must be UTF-8 encoded. File has UTF-16 LE BOM.');
+
+    // UTF-16 BE BOM (FE FF)
+    if (LBytes[0] = $FE) and (LBytes[1] = $FF) then
+      raise Exception.Create('TOML files must be UTF-8 encoded. File has UTF-16 BE BOM.');
+  end;
+
+  if Length(LBytes) >= 4 then
+  begin
+    // UTF-32 LE BOM (FF FE 00 00)
+    if (LBytes[0] = $FF) and (LBytes[1] = $FE) and (LBytes[2] = $00) and (LBytes[3] = $00) then
+      raise Exception.Create('TOML files must be UTF-8 encoded. File has UTF-32 LE BOM.');
+
+    // UTF-32 BE BOM (00 00 FE FF)
+    if (LBytes[0] = $00) and (LBytes[1] = $00) and (LBytes[2] = $FE) and (LBytes[3] = $FF) then
+      raise Exception.Create('TOML files must be UTF-8 encoded. File has UTF-32 BE BOM.');
+  end;
+
+  // Detect and skip UTF-8 BOM if present (GitHub Issue #1)
+  // UTF-8 BOM is optional but allowed per TOML specification
+  // Check for UTF-8 BOM (EF BB BF)
+  LBOMSize := 0;
+  if (Length(LBytes) >= 3) and
+     (LBytes[0] = $EF) and
+     (LBytes[1] = $BB) and
+     (LBytes[2] = $BF) then
+  begin
+    LBOMSize := 3;
+  end;
+
+  // Convert UTF-8 bytes to string manually, skipping BOM if present
+  if LBOMSize > 0 then
+    LSource := TEncoding.UTF8.GetString(LBytes, LBOMSize, Length(LBytes) - LBOMSize)
+  else
+    LSource := TEncoding.UTF8.GetString(LBytes);
 
   Result := FromString(LSource);
 end;
@@ -3252,9 +3292,17 @@ end;
 procedure TToml.SaveToFile(const AFileName: string);
 var
   LToml: string;
+  LEncoding: TEncoding;
 begin
   LToml := ToString;
-  TFile.WriteAllText(AFileName, LToml, TEncoding.UTF8);
+  // Use UTF8 without BOM to avoid parser errors when loading
+  // See GitHub Issue #1
+  LEncoding := TEncoding.GetEncoding(CP_UTF8);
+  try
+    TFile.WriteAllText(AFileName, LToml, LEncoding);
+  finally
+    LEncoding.Free;
+  end;
 end;
 
 function TToml.ToString: string;

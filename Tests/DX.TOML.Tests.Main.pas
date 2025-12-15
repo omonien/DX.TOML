@@ -36,6 +36,9 @@ type
 
     [Test]
     procedure TestComments;
+
+    [Test]
+    procedure TestSaveAndLoadFile;
   end;
 
   [TestFixture]
@@ -262,6 +265,46 @@ begin
   finally
     LLexer.Free;
   end;
+end;
+
+procedure TTomlLexerTests.TestSaveAndLoadFile;
+var
+  LFileName: string;
+  LToml: TToml;
+  LDb: TToml;
+  LUserId: string;
+begin
+  // Regression test for GitHub Issue #1
+  // Tests that saving and loading a TOML file doesn't introduce BOM characters
+  // that cause parser exceptions
+  LFileName := TPath.Combine(TPath.GetTempPath, 'TestSaveAndLoadFile.toml');
+
+  // Create and save TOML file
+  LToml := TToml.Create();
+  try
+    LDb := LToml.GetOrCreateTable('User');
+    LDb.SetString('UserId', '123456');
+    LToml.SaveToFile(LFileName);
+  finally
+    LToml.Free;
+  end;
+
+  // Load the file back and verify contents
+  LToml := TToml.FromFile(LFileName);
+  try
+    Assert.IsTrue(LToml.ContainsKey('User'), 'Should have User table');
+
+    LDb := LToml['User'].AsTable;
+    LUserId := LDb['UserId'].AsString;
+    Assert.AreEqual('123456', LUserId, 'UserId should match');
+  finally
+    if Assigned(LToml) then
+      LToml.Free;
+  end;
+
+  // Clean up
+  if TFile.Exists(LFileName) then
+    TFile.Delete(LFileName);
 end;
 
 { TTomlParserTests }

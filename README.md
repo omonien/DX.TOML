@@ -145,6 +145,51 @@ begin
 end;
 ```
 
+### UTF-8 Encoding and BOM Handling
+
+**TOML files MUST be UTF-8 encoded** according to the [TOML v1.0.0 specification](https://toml.io/en/v1.0.0).
+
+**Important notes about encoding:**
+
+1. **UTF-8 is mandatory** - TOML files must always be UTF-8 encoded. Files with UTF-16 or UTF-32 encoding (detected by BOM) will be rejected with a clear error message.
+
+2. **BOM is optional** - The UTF-8 Byte Order Mark (EF BB BF) is permitted but not required:
+   - `SaveToFile()` writes UTF-8 **without BOM** (recommended practice)
+   - `FromFile()` accepts files **with or without** UTF-8 BOM
+   - Non-UTF-8 BOMs (UTF-16, UTF-32) are detected and rejected
+
+3. **Delphi file I/O considerations:**
+   - When reading TOML files with Delphi's standard methods (`TFile.ReadAllText`, `TStringList.LoadFromFile`), **always specify UTF-8 encoding explicitly**
+   - Many TOML files in the wild don't include a BOM, so Delphi may default to ANSI encoding if not specified
+   - This can cause character corruption with special characters (ä, ö, ü, emoji, etc.)
+
+**Example - Correct way to read TOML files in Delphi:**
+
+```delphi
+// ✅ GOOD - Explicit UTF-8 encoding
+var
+  LContent: string;
+begin
+  LContent := TFile.ReadAllText('config.toml', TEncoding.UTF8);
+  // or use DX.TOML's FromFile which handles this automatically
+  var LToml := TToml.FromFile('config.toml');
+end;
+
+// ❌ BAD - May use wrong encoding if no BOM present
+var
+  LContent: string;
+begin
+  LContent := TFile.ReadAllText('config.toml');  // May default to ANSI!
+end;
+```
+
+**Why DX.TOML handles this correctly:**
+- `TToml.FromFile()` reads files as binary (`TFile.ReadAllBytes`)
+- Validates the encoding (rejects non-UTF-8 BOMs)
+- Skips UTF-8 BOM if present
+- Converts to string using UTF-8 encoding
+- This ensures correct handling regardless of BOM presence
+
 ### Create and Save TOML
 
 ```delphi
