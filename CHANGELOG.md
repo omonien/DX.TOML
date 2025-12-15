@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2025-12-15
+
 ### Fixed
 - **UTF-8 BOM Handling** ([#1](https://github.com/omonien/DX.TOML/issues/1))
   - `SaveToFile()` now writes UTF-8 without BOM to avoid parser errors
@@ -97,4 +99,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Tests/toml-test-adapter/` - Official test suite adapter
 - `BuildScripts/` - Build automation scripts
 
+[1.0.1]: https://github.com/omonien/DX.TOML/releases/tag/v1.0.1
 [1.0.0]: https://github.com/omonien/DX.TOML/releases/tag/v1.0.0
