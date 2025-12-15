@@ -5,6 +5,26 @@ All notable changes to DX.TOML will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **UTF-8 BOM Handling** ([#1](https://github.com/omonien/DX.TOML/issues/1))
+  - `SaveToFile()` now writes UTF-8 without BOM to avoid parser errors
+  - `FromFile()` now correctly handles files with UTF-8 BOM by skipping it
+  - `FromFile()` validates encoding and rejects non-UTF-8 BOMs (UTF-16, UTF-32) with clear error messages
+  - Added regression test `TestSaveAndLoadFile` to ensure save/load roundtrip works correctly
+
+### Added
+- **UTF-8 Encoding Documentation**
+  - Added comprehensive UTF-8 encoding section to README
+  - Documented TOML 1.0 specification requirement (UTF-8 mandatory)
+  - Explained BOM handling (optional but supported)
+  - Provided Delphi-specific guidance for reading TOML files with correct encoding
+  - Added examples showing correct vs incorrect file reading patterns
+
+### Changed
+- Renamed `.github/README.md` to `.github/GITHUB_FILES.md` to prevent GitHub from displaying it as repository README
+
 ## [1.0.0] - 2025-12-09
 
 ### Added
