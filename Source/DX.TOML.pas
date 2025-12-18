@@ -4089,7 +4089,7 @@ begin
       FBuilder.Append(AValue.AsInteger);
 
     tvkFloat:
-      FBuilder.Append(FloatToStr(AValue.AsFloat));
+      FBuilder.Append(FloatToStr(AValue.AsFloat, TFormatSettings.Invariant));
 
     tvkBoolean:
       if AValue.AsBoolean then
