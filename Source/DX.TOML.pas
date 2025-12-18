@@ -645,6 +645,7 @@ type
     function EscapeString(const AValue: string): string;
     function NeedsQuotes(const AKey: string): Boolean;
     function QuoteKey(const AKey: string): string;
+    function FormatDateTimeRFC3339(ADateTime: TDateTime): string;
   public
     constructor Create;
     destructor Destroy; override;
@@ -4079,6 +4080,20 @@ begin
     Result := AKey;
 end;
 
+function TTomlSerializer.FormatDateTimeRFC3339(ADateTime: TDateTime): string;
+var
+  LYear, LMonth, LDay: Word;
+  LHour, LMin, LSec, LMSec: Word;
+begin
+  // RFC 3339 Local DateTime format: YYYY-MM-DDTHH:MM:SS
+  // This is locale-independent and conforms to TOML 1.0.0 specification
+  DecodeDate(ADateTime, LYear, LMonth, LDay);
+  DecodeTime(ADateTime, LHour, LMin, LSec, LMSec);
+
+  Result := Format('%.4d-%.2d-%.2dT%.2d:%.2d:%.2d',
+                   [LYear, LMonth, LDay, LHour, LMin, LSec]);
+end;
+
 procedure TTomlSerializer.WriteValue(AValue: TTomlValue);
 begin
   case AValue.Kind of
@@ -4098,7 +4113,7 @@ begin
         FBuilder.Append('false');
 
     tvkDateTime:
-      FBuilder.Append(DateTimeToStr(AValue.AsDateTime));  // Simplified
+      FBuilder.Append(FormatDateTimeRFC3339(AValue.AsDateTime));
 
     tvkArray:
       WriteArray(AValue.AsArray);
